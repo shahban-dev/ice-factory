@@ -42,12 +42,12 @@
         {% endif %}
       </ul>
       <form class="d-flex my-2 my-lg-0 me-lg-2" method="get" action="{% url 'search' %}" role="search">
-        <input class="form-control" type="search" name="q" placeholder="Search customers, invoices…" aria-label="Search" value="{{ request.GET.q|default:'' }}">
+        <input class="form-control search-input" type="search" name="q" placeholder="Search customers, invoices…" aria-label="Search" value="{{ request.GET.q|default:'' }}">
         <button class="btn btn-outline-light ms-2" type="submit">Search</button>
       </form>
       <ul class="navbar-nav ms-auto">
         {% if user.is_authenticated %}
-        <li class="nav-item"><span class="nav-link">Signed in as <strong>{{ user.username }}</strong></span></li>
+        <li class="nav-item"><span class="nav-link"><strong>{{ user.username }}</strong></span></li>
         <li class="nav-item">
           <form method="post" action="{% url 'logout' %}" class="d-inline">
             {% csrf_token %}

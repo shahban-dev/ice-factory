@@ -3,7 +3,7 @@ reason, which is saved as the history change reason."""
 
 from django import forms
 
-from core.forms import VersionedFormMixin
+from core.forms import BootstrapWidgetsMixin, VersionedFormMixin
 from customers.models import Customer, normalize_phone
 
 
@@ -34,7 +34,7 @@ class CustomerForm(VersionedFormMixin, forms.ModelForm):
         return phone
 
 
-class CustomerImportUploadForm(forms.Form):
+class CustomerImportUploadForm(BootstrapWidgetsMixin, forms.Form):
     file = forms.FileField(
         help_text="Excel (.xlsx) or CSV (.csv), maximum 5 MB and 5,000 rows. "
                   "Columns: name, phone, address, opening_balance."

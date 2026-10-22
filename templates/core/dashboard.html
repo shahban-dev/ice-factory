@@ -53,7 +53,9 @@
 
 <div class="card p-3 p-md-4 mb-4">
   <h2 class="h5">Last 6 months</h2>
-  <canvas id="month-chart" height="220"></canvas>
+  <div style="position: relative; height: 320px;">
+    <canvas id="month-chart"></canvas>
+  </div>
 </div>
 
 <div class="row g-3 mb-4">
@@ -95,7 +97,7 @@
 {{ chart_billed|json_script:"chart-billed" }}
 {{ chart_collected|json_script:"chart-collected" }}
 {{ chart_expenses|json_script:"chart-expenses" }}
-<script src="{% static 'js/chart.umd.js' %}"></script>
+<script src="{% static 'vendor/chart.umd.min.js' %}"></script>
 <script>
 (function () {
   const labels = JSON.parse(document.getElementById("chart-months").textContent);

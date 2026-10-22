@@ -3,7 +3,7 @@
 from django import forms
 from django.utils import timezone
 
-from core.forms import VersionedFormMixin
+from core.forms import BootstrapWidgetsMixin, VersionedFormMixin
 from customers.models import normalize_phone
 from employees.models import Employee, Payroll, normalize_cnic
 from employees.services import compute_net
@@ -62,7 +62,7 @@ class EmployeeForm(VersionedFormMixin, forms.ModelForm):
         return cleaned
 
 
-class PayrollGenerateForm(forms.Form):
+class PayrollGenerateForm(BootstrapWidgetsMixin, forms.Form):
     year = forms.IntegerField(min_value=2000, max_value=2100)
     month = forms.IntegerField(min_value=1, max_value=12)
 
@@ -111,7 +111,7 @@ class PayrollEditForm(VersionedFormMixin, forms.ModelForm):
         return cleaned
 
 
-class MarkPaidForm(forms.Form):
+class MarkPaidForm(BootstrapWidgetsMixin, forms.Form):
     paid_date = forms.DateField(
         widget=forms.DateInput(attrs={"type": "date"})
     )

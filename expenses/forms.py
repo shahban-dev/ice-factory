@@ -3,11 +3,11 @@
 from django import forms
 from django.utils import timezone
 
-from core.forms import VersionedFormMixin
+from core.forms import BootstrapWidgetsMixin, VersionedFormMixin
 from expenses.models import Expense, ExpenseCategory
 
 
-class ExpenseCategoryForm(forms.ModelForm):
+class ExpenseCategoryForm(BootstrapWidgetsMixin, forms.ModelForm):
     class Meta:
         model = ExpenseCategory
         fields = ["name", "is_active"]

@@ -10,7 +10,7 @@ from django import forms
 from django.forms import inlineformset_factory
 from django.utils import timezone
 
-from core.forms import VersionedFormMixin
+from core.forms import BootstrapWidgetsMixin, VersionedFormMixin
 from customers.models import Customer
 from sales.models import Payment, Product, Sale, SaleItem
 
@@ -21,7 +21,7 @@ def _not_future(value, label):
     return value
 
 
-class ProductForm(forms.ModelForm):
+class ProductForm(BootstrapWidgetsMixin, forms.ModelForm):
     class Meta:
         model = Product
         fields = ["name", "size", "default_price", "is_active"]
@@ -77,8 +77,9 @@ SaleItemFormSet = inlineformset_factory(
     fields=["product", "quantity", "unit_price"],
     extra=1, can_delete=True,
     widgets={
-        "quantity": forms.NumberInput(attrs={"inputmode": "numeric", "min": "1"}),
-        "unit_price": forms.NumberInput(attrs={"inputmode": "decimal", "step": "0.01"}),
+        "product": forms.Select(attrs={"class": "form-select"}),
+        "quantity": forms.NumberInput(attrs={"inputmode": "numeric", "min": "1", "class": "form-control"}),
+        "unit_price": forms.NumberInput(attrs={"inputmode": "decimal", "step": "0.01", "class": "form-control"}),
     },
 )
 

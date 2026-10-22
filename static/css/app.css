@@ -39,6 +39,13 @@ footer {
 .toast-container {
   padding-bottom: calc(1rem + env(safe-area-inset-bottom)) !important;
 }
+/* Keep the navbar on one line on laptops: the search box stays compact
+   once the menu is expanded, and full-width in the collapsed menu. */
+@media (min-width: 992px) {
+  .navbar .search-input {
+    width: 170px;
+  }
+}
 .btn {
   display: inline-flex;
   align-items: center;

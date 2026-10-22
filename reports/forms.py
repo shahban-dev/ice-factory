@@ -2,10 +2,11 @@
 
 from django import forms
 
+from core.forms import BootstrapWidgetsMixin
 from core.models import Settings
 
 
-class SettingsForm(forms.ModelForm):
+class SettingsForm(BootstrapWidgetsMixin, forms.ModelForm):
     class Meta:
         model = Settings
         fields = ["factory_name", "address", "phone", "invoice_prefix",
@@ -15,7 +16,7 @@ class SettingsForm(forms.ModelForm):
         }
 
 
-class BackupDownloadForm(forms.Form):
+class BackupDownloadForm(BootstrapWidgetsMixin, forms.Form):
     password = forms.CharField(
         widget=forms.PasswordInput(attrs={"autocomplete": "current-password"}),
         help_text="Enter your login password again to confirm.",

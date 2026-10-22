@@ -1,9 +1,46 @@
-"""Forms helpers: optimistic-concurrency version field."""
+"""Forms helpers: optimistic-concurrency version field and Bootstrap
+widget styling.
+
+Templates render ``{{ field }}`` directly, so widgets must carry their
+own Bootstrap classes — otherwise inputs render as unstyled browser
+defaults that overflow narrow columns on phones (as the sale form
+once did).
+"""
 
 from django import forms
 
 
-class VersionedFormMixin(forms.Form):
+def style_form_widgets(form):
+    """Add Bootstrap classes to every visible widget of a form instance.
+
+    Selects get ``form-select``, checkboxes get ``form-check-input``,
+    everything else gets ``form-control``. Hidden inputs are skipped.
+    Safe to call on any form; existing classes are kept.
+    """
+    for field in form.fields.values():
+        widget = field.widget
+        if isinstance(widget, forms.HiddenInput):
+            continue
+        if isinstance(widget, forms.CheckboxInput):
+            add = "form-check-input"
+        elif isinstance(widget, (forms.Select, forms.SelectMultiple)):
+            add = "form-select"
+        else:
+            add = "form-control"
+        existing = widget.attrs.get("class", "")
+        if add not in existing.split():
+            widget.attrs["class"] = f"{existing} {add}".strip()
+
+
+class BootstrapWidgetsMixin:
+    """Plain mixin that styles widgets. Add it to any form class."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        style_form_widgets(self)
+
+
+class VersionedFormMixin(BootstrapWidgetsMixin, forms.Form):
     """Adds a hidden ``version`` field carrying the version the form was
     loaded with. Views compare it against the locked row before saving.
 
