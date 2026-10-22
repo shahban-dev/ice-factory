@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load core_tags %}
 {% block title %}{{ sale.invoice_number }}{% endblock %}
+{% block back %}<a href="{% url 'sales:sale_list' %}" class="btn btn-outline-secondary mb-3 no-print">← Back to sales</a>{% endblock %}
 {% block content %}
 {% if sale.is_deleted %}
 <div class="alert alert-danger"><strong>CANCELLED</strong> — this sale was deleted. It is shown for the record only.</div>

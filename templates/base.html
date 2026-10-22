@@ -18,7 +18,7 @@
   {% block extra_head %}{% endblock %}
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
-<nav class="navbar navbar-expand-lg navbar-dark bg-brand sticky-top no-print">
+<nav class="navbar navbar-expand-xxl navbar-dark bg-brand sticky-top no-print">
   <div class="container-fluid">
     <a class="navbar-brand fw-bold" href="{% url 'home' %}">&#10052; {{ factory.factory_name|default:"Ice Factory" }}</a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav"
@@ -26,22 +26,29 @@
       <span class="navbar-toggler-icon"></span>
     </button>
     <div class="collapse navbar-collapse" id="mainNav">
-      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-        <li class="nav-item"><a class="nav-link" href="{% url 'home' %}">Dashboard</a></li>
-        <li class="nav-item"><a class="nav-link" href="{% url 'customers:list' %}">Customers</a></li>
-        <li class="nav-item"><a class="nav-link" href="{% url 'sales:sale_list' %}">Sales</a></li>
-        <li class="nav-item"><a class="nav-link" href="{% url 'sales:product_list' %}">Products</a></li>
-        <li class="nav-item"><a class="nav-link" href="{% url 'sales:payment_list' %}">Payments</a></li>
-        <li class="nav-item"><a class="nav-link" href="{% url 'expenses:expense_list' %}">Expenses</a></li>
-        <li class="nav-item"><a class="nav-link" href="{% url 'employees:list' %}">Employees</a></li>
-        <li class="nav-item"><a class="nav-link" href="{% url 'employees:payroll_list' %}">Payroll</a></li>
-        <li class="nav-item"><a class="nav-link" href="{% url 'reports:index' %}">Reports</a></li>
-        <li class="nav-item"><a class="nav-link" href="{% url 'reports:settings' %}">Settings</a></li>
-        {% if user.is_superuser %}
-        <li class="nav-item"><a class="nav-link" href="{% url 'admin:index'}">Admin</a></li>
-        {% endif %}
+      {% with vn=request.resolver_match.view_name %}
+      <ul class="navbar-nav me-auto mb-2 mb-xxl-0">
+        <li class="nav-item"><a class="nav-link {% if vn == "home" %}active{% endif %}" href="{% url 'home' %}" {% if vn == "home" %}aria-current="page"{% endif %}>Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link {% if "customers:" in vn %}active{% endif %}" href="{% url 'customers:list' %}" {% if "customers:" in vn %}aria-current="page"{% endif %}>Customers</a></li>
+        <li class="nav-item"><a class="nav-link {% if "sales:sale" in vn or vn == "sales:invoice" or vn == "sales:invoice_pdf" %}active{% endif %}" href="{% url 'sales:sale_list' %}" {% if "sales:sale" in vn or vn == "sales:invoice" or vn == "sales:invoice_pdf" %}aria-current="page"{% endif %}>Sales</a></li>
+        <li class="nav-item"><a class="nav-link {% if "sales:product" in vn %}active{% endif %}" href="{% url 'sales:product_list' %}" {% if "sales:product" in vn %}aria-current="page"{% endif %}>Products</a></li>
+        <li class="nav-item"><a class="nav-link {% if "sales:payment" in vn %}active{% endif %}" href="{% url 'sales:payment_list' %}" {% if "sales:payment" in vn %}aria-current="page"{% endif %}>Payments</a></li>
+        <li class="nav-item"><a class="nav-link {% if "expenses:" in vn %}active{% endif %}" href="{% url 'expenses:expense_list' %}" {% if "expenses:" in vn %}aria-current="page"{% endif %}>Expenses</a></li>
+        <li class="nav-item"><a class="nav-link {% if "employees:" in vn and "employees:payroll" not in vn and vn != "employees:payslip_pdf" %}active{% endif %}" href="{% url 'employees:list' %}" {% if "employees:" in vn and "employees:payroll" not in vn and vn != "employees:payslip_pdf" %}aria-current="page"{% endif %}>Employees</a></li>
+        <li class="nav-item"><a class="nav-link {% if "employees:payroll" in vn or vn == "employees:payslip_pdf" %}active{% endif %}" href="{% url 'employees:payroll_list' %}" {% if "employees:payroll" in vn or vn == "employees:payslip_pdf" %}aria-current="page"{% endif %}>Payroll</a></li>
+        <li class="nav-item"><a class="nav-link {% if "reports:" in vn and vn != "reports:settings" %}active{% endif %}" href="{% url 'reports:index' %}" {% if "reports:" in vn and vn != "reports:settings" %}aria-current="page"{% endif %}>Reports</a></li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle {% if vn == "reports:settings" or "admin:" in vn %}active{% endif %}" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">More</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item {% if vn == "reports:settings" %}active{% endif %}" href="{% url 'reports:settings' %}" {% if vn == "reports:settings" %}aria-current="page"{% endif %}>Settings</a></li>
+            {% if user.is_superuser %}
+            <li><a class="dropdown-item {% if "admin:" in vn %}active{% endif %}" href="{% url 'admin:index' %}">Admin</a></li>
+            {% endif %}
+          </ul>
+        </li>
       </ul>
-      <form class="d-flex my-2 my-lg-0 me-lg-2" method="get" action="{% url 'search' %}" role="search">
+      {% endwith %}
+      <form class="d-flex my-2 my-xxl-0 me-xxl-2" method="get" action="{% url 'search' %}" role="search">
         <input class="form-control search-input" type="search" name="q" placeholder="Search customers, invoices…" aria-label="Search" value="{{ request.GET.q|default:'' }}">
         <button class="btn btn-outline-light ms-2" type="submit">Search</button>
       </form>
@@ -63,6 +70,7 @@
 </nav>
 
 <main class="container py-4">
+  {% block back %}{% endblock %}
   {% if messages %}
     {% for message in messages %}
       <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Expense categories{% endblock %}
+{% block back %}<a href="{% url 'expenses:expense_list' %}" class="btn btn-outline-secondary mb-3 no-print">← Back to expenses</a>{% endblock %}
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
   <h1 class="h4 mb-0">Expense categories</h1>

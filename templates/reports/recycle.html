@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Recycle bin{% endblock %}
+{% block back %}<a href="{% url 'reports:index' %}" class="btn btn-outline-secondary mb-3 no-print">← Back to reports</a>{% endblock %}
 {% block content %}
 <h1 class="h4 mb-3">Recycle bin</h1>
 <p class="text-muted">Deleted records stay here until restored. Nothing is permanently deleted from this screen. Restoring a sale also restores the payments deleted with it.</p>

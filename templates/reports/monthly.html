@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load core_tags %}
 {% block title %}Monthly report{% endblock %}
+{% block back %}<a href="{% url 'reports:index' %}" class="btn btn-outline-secondary mb-3 no-print">← Back to reports</a>{% endblock %}
 {% block content %}
 <h1 class="h4 mb-3">Monthly report — {{ data.month_name }} {{ data.year }}</h1>
 

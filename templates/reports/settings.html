@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Settings{% endblock %}
+{% block back %}<a href="{% url 'home' %}" class="btn btn-outline-secondary mb-3 no-print">← Dashboard</a>{% endblock %}
 {% block content %}
 <h1 class="h4 mb-3">Factory settings</h1>
 <form method="post" class="card p-3 p-md-4 mb-4">

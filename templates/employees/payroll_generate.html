@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Generate payroll{% endblock %}
+{% block back %}<a href="{% url 'employees:payroll_list' %}" class="btn btn-outline-secondary mb-3 no-print">← Back to payroll</a>{% endblock %}
 {% block content %}
 <h1 class="h4 mb-3">Generate payroll</h1>
 <p class="text-muted">Creates draft rows for every eligible employee for the month. Employees who already have a row that month are skipped, and so are employees who were not employed that month. Review and edit the drafts, then mark each paid.</p>

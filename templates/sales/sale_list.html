@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load core_tags %}
 {% block title %}Sales{% endblock %}
+{% block back %}<a href="{% url 'home' %}" class="btn btn-outline-secondary mb-3 no-print">← Dashboard</a>{% endblock %}
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
   <h1 class="h4 mb-0">Sales</h1>

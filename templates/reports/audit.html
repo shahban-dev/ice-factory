@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Audit log{% endblock %}
+{% block back %}<a href="{% url 'reports:index' %}" class="btn btn-outline-secondary mb-3 no-print">← Back to reports</a>{% endblock %}
 {% block content %}
 <h1 class="h4 mb-3">Audit log</h1>
 <form method="get" class="card p-3 mb-3">

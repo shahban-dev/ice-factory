@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load core_tags %}
 {% block title %}Import preview{% endblock %}
+{% block back %}<a href="{% url 'customers:import_upload' %}" class="btn btn-outline-secondary mb-3 no-print">← Back to upload</a>{% endblock %}
 {% block content %}
 <h1 class="h4 mb-3">Import preview</h1>
 <p class="text-muted">{{ savable }} row(s) ready to save, {{ errored }} row(s) with errors (they will be skipped). Nothing is saved until you confirm.</p>

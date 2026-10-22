@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load core_tags %}
 {% block title %}Mark paid — {{ payroll.employee.name }}{% endblock %}
+{% block back %}<a href="{% url 'employees:payroll_list' %}" class="btn btn-outline-secondary mb-3 no-print">← Back to payroll</a>{% endblock %}
 {% block content %}
 <h1 class="h4 mb-3">Mark paid — {{ payroll.employee.name }} ({{ month_name }} {{ payroll.year }})</h1>
 {% if payroll.net_salary <= 0 %}

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Import customers{% endblock %}
+{% block back %}<a href="{% url 'customers:list' %}" class="btn btn-outline-secondary mb-3 no-print">← Back to customers</a>{% endblock %}
 {% block content %}
 <h1 class="h4 mb-3">Import customers</h1>
 <p class="text-muted">Upload an Excel (.xlsx) or CSV (.csv) file with the columns <strong>name, phone, address, opening_balance</strong>. Maximum 5 MB and 5,000 rows. You will see a preview before anything is saved.</p>

@@ -39,11 +39,24 @@ footer {
 .toast-container {
   padding-bottom: calc(1rem + env(safe-area-inset-bottom)) !important;
 }
-/* Keep the navbar on one line on laptops: the search box stays compact
-   once the menu is expanded, and full-width in the collapsed menu. */
-@media (min-width: 992px) {
+/* Active nav link: a visible "you are here" pill on the dark navbar.
+   The same highlight marks the More menu when Settings or Admin is open,
+   and the dropdown item itself uses the brand colour. */
+.navbar-dark .navbar-nav .nav-link.active {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 0.5rem;
+  font-weight: 600;
+  color: #fff;
+}
+.dropdown-item.active {
+  background-color: var(--brand);
+}
+/* The full menu only shows on wide desktops (navbar-expand-xxl); below
+   1400px it collapses into the hamburger, so the bar can never wrap or
+   overflow on a laptop. On wide screens the search box stays compact. */
+@media (min-width: 1400px) {
   .navbar .search-input {
-    width: 170px;
+    width: 150px;
   }
 }
 .btn {

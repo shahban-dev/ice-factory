@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load core_tags %}
 {% block title %}Customer dues report{% endblock %}
+{% block back %}<a href="{% url 'reports:index' %}" class="btn btn-outline-secondary mb-3 no-print">← Back to reports</a>{% endblock %}
 {% block content %}
 <h1 class="h4 mb-3">Customer dues report</h1>
 <div class="d-flex gap-2 flex-wrap mb-3">
