@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 from django.views.generic import ListView
 
+from core.params import parse_int
 from core.permissions import PermissionRequiredMixin
 from core.services import ConcurrentEditError, save_form_with_version, soft_delete_objects
 from employees.forms import (
@@ -122,6 +123,17 @@ class EmployeeDeleteView(PermissionRequiredMixin, View):
     def post(self, request, pk):
         employee = get_object_or_404(Employee, pk=pk)
         if request.POST.get("action") == "deactivate":
+            if employee.leaving_date is None:
+                # Without a leaving date, payroll cannot place this
+                # person in any month — so deactivation is refused until
+                # the date is set. Otherwise their last partial month
+                # would silently never be generated.
+                messages.error(
+                    request,
+                    "Set a leaving date for this employee first, then "
+                    "deactivate. Payroll needs the date to generate "
+                    "their last partial month.")
+                return redirect("employees:edit", pk=employee.pk)
             employee.is_active = False
             employee.updated_by = request.user
             employee._change_reason = "Deactivated instead of deleting"
@@ -148,9 +160,9 @@ class PayrollListView(PermissionRequiredMixin, ListView):
 
     def get_queryset(self):
         qs = Payroll.objects.select_related("employee")
-        year = self.request.GET.get("year", "")
-        month = self.request.GET.get("month", "")
-        employee_id = self.request.GET.get("employee", "")
+        year = parse_int(self.request.GET.get("year", ""))
+        month = parse_int(self.request.GET.get("month", ""))
+        employee_id = parse_int(self.request.GET.get("employee", ""))
         status = self.request.GET.get("status", "")
         if year:
             qs = qs.filter(year=year)
@@ -164,7 +176,7 @@ class PayrollListView(PermissionRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["employees"] = Employee.objects.filter(is_active=True).order_by("name")
+        context["employees"] = Employee.objects.all().order_by("name")
         context["year"] = self.request.GET.get("year", "")
         context["month"] = self.request.GET.get("month", "")
         context["selected_employee"] = self.request.GET.get("employee", "")
@@ -211,6 +223,12 @@ class PayrollGenerateView(PermissionRequiredMixin, View):
                     f"Payroll generated: {result['created']} draft(s) created, "
                     f"{result['skipped_existing']} already existed, "
                     f"{result['skipped_ineligible']} not eligible.")
+                if result.get("warnings"):
+                    messages.warning(
+                        request,
+                        "No row for staff with no leaving date: "
+                        + ", ".join(result["warnings"])
+                        + ". Set their leaving date, then generate again.")
                 return redirect(
                     f"/employees/payroll/?year={form.cleaned_data['year']}"
                     f"&month={form.cleaned_data['month']}"

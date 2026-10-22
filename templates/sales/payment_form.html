@@ -13,6 +13,7 @@
     {{ form.customer.label_tag }}
     {{ form.customer }}
     {% if form.customer.errors %}<div class="text-danger">{{ form.customer.errors }}</div>{% endif %}
+    {% if payment %}<div class="form-text">Customer cannot be changed. Delete this payment and record a new one instead.</div>{% endif %}
     <div id="balance-display" class="form-text"></div>
   </div>
   <div class="mb-3">
@@ -24,6 +25,7 @@
     {{ form.amount.label_tag }}
     {{ form.amount }}
     {% if form.amount.errors %}<div class="text-danger">{{ form.amount.errors }}</div>{% endif %}
+    {% if payment.sale and not payment.sale.customer %}<div class="form-text">This payment belongs to a walk-in sale. Edit the sale to change the amount.</div>{% endif %}
     <div id="overpay-warning" class="alert alert-warning d-none mt-2">
       This amount is more than the customer's balance. The excess will be kept as advance credit.
     </div>

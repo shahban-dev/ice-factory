@@ -59,7 +59,7 @@
 <div class="card p-3 p-md-4 mb-3">
   <h2 class="h5">Top 10 customers by billed</h2>
   {% for row in data.top_customers %}
-  <div class="d-flex justify-content-between"><span>{{ row.sale__customer__name }}</span><strong class="money">{{ row.total|rs }}</strong></div>
+  <div class="d-flex justify-content-between"><span>{{ row.customer__name }}</span><strong class="money">{{ row.total|rs }}</strong></div>
   {% empty %}
   <p class="text-muted">No customer sales this month.</p>
   {% endfor %}

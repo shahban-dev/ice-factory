@@ -242,7 +242,9 @@ documentation.
   user/model/date/object) — **Done**.
 - Recycle bin restore (restoring a sale restores its delete_batch; no
   permanent deletion in UI) — **Done** (tested, including the
-  payroll-expense guard).
+  payroll-expense guard; restore is refused with a message when the
+  sale's customer is still deleted, or when a live payroll row or
+  CNIC already exists).
 - Global search (customer name/phone, invoice number) — **Done**.
 - Settings single row with history (factory name, address, phone,
   invoice prefix default INV, optional tax registration line, invoice
@@ -253,9 +255,10 @@ documentation.
   backup shown on settings page, manual backup download requires
   password re-entry + audit log, restore instructions + tested restore
   on a fresh DB — **Done** (restore tested end-to-end on SQLite:
-  decrypt + gunzip + open with correct data; the PostgreSQL
-  `pg_restore` run is in the DEPLOYMENT.md go-live checklist for the
-  operator to repeat on the VPS).
+  decrypt + gunzip + open with correct data, AND on PostgreSQL: an
+  encrypted backup restored into a fresh PostgreSQL database with
+  matching row counts, verified 2026-10-22; the operator repeats the
+  pg_restore run on the VPS per DEPLOYMENT.md).
 - PWA manifest (192/512/maskable icons, standalone, theme color),
   apple-touch-icon, minimal service worker whose only job is a friendly
   no-connection page — never caches app pages/data — **Done**.
@@ -360,6 +363,41 @@ documentation.
 - seed_demo command with hand-calculated expected totals file —
   **Done** (refuses unless DEBUG or forced with typed confirmation;
   refuses if demo data already exists).
+
+## Group A fixes (2026-10-22; 115 tests, all passing on SQLite)
+
+- One money source of truth: dashboard, monthly report, sales
+  register, customer list and ledger all derive billed, collected,
+  balance and outstanding from the same functions — sale totals are
+  items minus discount, and deleted sales are excluded everywhere.
+- Allocation: a sale's own payments apply to that sale first (capped
+  at its total, overflow to the pool), then pool and general payments
+  settle the oldest debt first (opening balance, then oldest sale).
+  Customer balance totals are unchanged.
+- Standalone payment requires a customer (form error, nothing saved);
+  a database constraint enforces "customer or sale" on every payment
+  row. The migration hard-deletes any existing orphan payments
+  (their audit history rows are kept).
+- Payment edits: the customer can never change; a walk-in sale's
+  payment amount is locked (edit the sale instead); a credit sale's
+  linked payment amount can change with a reason; editing a sale's
+  date moves its linked payments to the new date.
+- Payroll eligibility is by dates, not by active flag: a leaver
+  deactivated before payroll ran still gets their last partial month.
+  Deactivating an employee requires a leaving date; staff deactivated
+  without one are listed as a warning and get no row.
+- Customer import rejects non-finite balances (NaN/Infinity),
+  balances over Rs 9,999,999,999.99, more than 2 decimals, names over
+  200 characters and addresses over 1,000 characters — in the
+  preview, never as a crash on confirm.
+- Urdu names and addresses print correctly in every PDF (invoice,
+  ledger, payslip, report PDFs) via a bundled Noto Sans Arabic font
+  with reshaping; browser print of the HTML invoice is the
+  recommended print path.
+- Robustness: invalid query strings (bad customer id, bad date) are
+  ignored instead of returning 500; money fields accept at most 2
+  decimals; recycle-bin restore failures show a message instead of
+  500.
 
 ## Process (from the brief)
 

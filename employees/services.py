@@ -58,13 +58,24 @@ def compute_net(base_salary, bonus, deductions):
 def generate_payroll(user, year, month):
     """Create draft rows for every eligible employee in one action.
     Skips employees who already have a row that month and employees not
-    employed that month. Returns counts. Only current and past months."""
+    employed that month. Returns counts plus warnings.
+
+    Eligibility is decided by DATES, not by is_active: an employee who
+    left mid-month and was deactivated before payroll ran still gets
+    their last partial month. Inactive employees with NO leaving date
+    cannot be placed in any month, so they are excluded and listed in
+    warnings — set their leaving date and generate again."""
     today = timezone.localdate()
     if (year, month) > (today.year, today.month):
         raise ValidationError("Payroll cannot be generated for a future month.")
     created = skipped_existing = skipped_ineligible = 0
+    warnings = []
     with transaction.atomic():
-        for employee in Employee.objects.filter(is_active=True).order_by("name"):
+        for employee in Employee.objects.all().order_by("name"):
+            if not employee.is_active and employee.leaving_date is None:
+                skipped_ineligible += 1
+                warnings.append(employee.name)
+                continue
             proration = compute_proration(employee, year, month)
             if proration is None:
                 skipped_ineligible += 1
@@ -89,6 +100,7 @@ def generate_payroll(user, year, month):
         "created": created,
         "skipped_existing": skipped_existing,
         "skipped_ineligible": skipped_ineligible,
+        "warnings": warnings,
     }
 
 

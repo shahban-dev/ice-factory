@@ -1,0 +1,12 @@
+Arabic-script font for PDFs (OFL licence).
+
+Files:
+- NotoSansArabic-Regular.ttf / NotoSansArabic-Bold.ttf — used by
+  core/pdf_text.py for Urdu/Arabic names in invoice, ledger, payslip
+  and report PDFs. Noto Sans Arabic is published by Google under the
+  SIL Open Font License 1.1 (free to use, copy and redistribute).
+- *.ttf.b64 — the same files, base64-encoded. The repo's push method
+  cannot carry binary files, so the .b64 files are the committed copy
+  and the app decodes them to .ttf on first use (see
+  core/pdf_text.py: ensure_fonts). The .ttf files themselves are
+  git-ignored and regenerated, never committed.

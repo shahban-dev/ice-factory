@@ -51,24 +51,34 @@ def annotate_sale_totals(qs):
     ).annotate(total_annotated=F("subtotal_annotated") - F("discount"))
 
 
-def annotate_customer_balances(qs):
+def annotate_customer_balances(qs, at_date=None):
     """Annotate a Customer queryset with billed, paid and balance, using
-    aggregate queries (no per-row queries, no join multiplication)."""
+    aggregate queries (no per-row queries, no join multiplication).
+    Billed is the sum of NON-deleted sale totals (items minus discount);
+    paid is the sum of non-deleted payments. With at_date, only sales
+    and payments dated on or before it count, giving the balance as of
+    that date. This is the single balance implementation: reports build
+    on it (see reports/services.py) instead of recomputing balances."""
     items_sum = (
         SaleItem.objects.filter(sale=OuterRef("pk"))
         .values("sale")
         .annotate(s=Sum(F("quantity") * F("unit_price"), output_field=DecimalField()))
         .values("s")
     )
+    sales = Sale.objects.filter(customer=OuterRef("pk"), is_deleted=False)
+    payments = Payment.objects.filter(customer=OuterRef("pk"), is_deleted=False)
+    if at_date is not None:
+        sales = sales.filter(date__lte=at_date)
+        payments = payments.filter(date__lte=at_date)
     billed_sq = (
-        Sale.objects.filter(customer=OuterRef("pk"), is_deleted=False)
+        sales
         .annotate(st=Subquery(items_sum, output_field=DecimalField()))
         .values("customer")
         .annotate(b=Sum(F("st") - F("discount"), output_field=DecimalField()))
         .values("b")
     )
     paid_sq = (
-        Payment.objects.filter(customer=OuterRef("pk"), is_deleted=False)
+        payments
         .values("customer")
         .annotate(p=Sum("amount"))
         .values("p")
@@ -83,45 +93,66 @@ def allocate_customer(customer):
     """THE allocation function. Used by the ledger, invoice, customer list
     and reports — nowhere else computes invoice status.
 
-    Pool all of the customer's non-deleted payments and apply them to the
-    oldest debt first: the opening balance first, then sales ordered by
-    (date, id). A negative opening balance counts as extra payment. Money
-    left over is advance credit.
+    Two steps, in this order:
 
+    1. Each sale's OWN linked payments (entered on that sale's form)
+       apply to that sale first, capped at its total. Any overflow joins
+       the pool. So a sale paid in full in cash shows "Paid" even when
+       the customer has an older balance.
+    2. The pool — general payments, plus overflow from step 1 — pays
+       the oldest debt first: the opening balance first, then sales
+       ordered by (date, id). A negative opening balance counts as
+       extra payment. Money left over is advance credit.
+
+    Customer balance totals never change: balance is always
+    opening + billed - paid, whatever the allocation order.
     Returns balance, credit, billed, paid and per-sale allocation/status.
     """
     sales = list(
         customer.sales.all()
-        .prefetch_related("items", "payments")
+        .prefetch_related("items")
         .order_by("date", "id")
     )
-    payments_total = (
-        customer.payments.aggregate(t=Sum("amount"))["t"] or Decimal("0")
-    )
-    opening = customer.opening_balance
-    available = payments_total + max(Decimal("0"), -opening)
-
-    debts = []
-    if opening > 0:
-        debts.append(("opening", opening))
-    for sale in sales:
-        debts.append((sale, sale.total))
-
-    allocated_by_sale = {}
-    opening_allocated = Decimal("0")
-    remaining = available
-    for kind, amount in debts:
-        take = min(amount, remaining)
-        if kind == "opening":
-            opening_allocated = take
+    sale_ids = {sale.id for sale in sales}
+    # Partition the customer's non-deleted payments: linked to one of
+    # this customer's own sales, or general pool money. (A payment whose
+    # sale belongs to another customer is pool money here; A3 stops
+    # such mismatches from being created.)
+    linked_by_sale = {}
+    pool = Decimal("0")
+    payments = list(customer.payments.all())
+    for payment in payments:
+        if payment.sale_id in sale_ids:
+            linked_by_sale[payment.sale_id] = (
+                linked_by_sale.get(payment.sale_id, Decimal("0"))
+                + payment.amount
+            )
         else:
-            allocated_by_sale[kind.id] = take
-        remaining -= take
-    credit = remaining
+            pool += payment.amount
+
+    opening = customer.opening_balance
+    allocated_by_sale = {}
+    for sale in sales:
+        linked = linked_by_sale.get(sale.id, Decimal("0"))
+        take = min(linked, sale.total)
+        allocated_by_sale[sale.id] = take
+        pool += linked - take
+
+    available = pool + max(Decimal("0"), -opening)
+    opening_allocated = Decimal("0")
+    if opening > 0:
+        opening_allocated = min(opening, available)
+        available -= opening_allocated
+    for sale in sales:
+        room = sale.total - allocated_by_sale[sale.id]
+        take = min(room, available)
+        allocated_by_sale[sale.id] += take
+        available -= take
+    credit = available
 
     per_sale = []
     for sale in sales:
-        allocated = allocated_by_sale.get(sale.id, Decimal("0"))
+        allocated = allocated_by_sale[sale.id]
         total = sale.total
         if allocated >= total:
             status = "paid"
@@ -139,6 +170,7 @@ def allocate_customer(customer):
         )
 
     billed = sum((s.total for s in sales), Decimal("0"))
+    payments_total = sum((p.amount for p in payments), Decimal("0"))
     balance = opening + billed - payments_total
     return {
         "balance": balance,
@@ -173,6 +205,15 @@ def create_sale(user, date, customer, discount, items_data, paid_now,
     """Create a sale with items and an optional paid-now payment, in one
     transaction. Walk-in sales must be fully paid at the time of sale."""
     not_future_date(date, "Sale date")
+    if not isinstance(discount, Decimal):
+        discount = Decimal(str(discount))
+    if not isinstance(paid_now, Decimal):
+        paid_now = Decimal(str(paid_now))
+    if discount != discount.quantize(Decimal("0.01")):
+        raise ValidationError("Discount must have at most 2 decimal places.")
+    if paid_now != paid_now.quantize(Decimal("0.01")):
+        raise ValidationError(
+            "Paid-now amount must have at most 2 decimal places.")
     subtotal = _validate_items(items_data)
     if discount < 0 or discount > subtotal:
         raise ValidationError("Discount must be between 0 and the subtotal.")
@@ -218,6 +259,10 @@ def update_sale(sale, user, date, customer, discount, items_data, notes,
     (sale, balance_negative_warning). Raises ValidationError on bad data
     and ConcurrentEditError on a stale version."""
     not_future_date(date, "Sale date")
+    if not isinstance(discount, Decimal):
+        discount = Decimal(str(discount))
+    if discount != discount.quantize(Decimal("0.01")):
+        raise ValidationError("Discount must have at most 2 decimal places.")
     subtotal = _validate_items(items_data)
     if discount < 0 or discount > subtotal:
         raise ValidationError("Discount must be between 0 and the subtotal.")
@@ -269,6 +314,7 @@ def update_sale(sale, user, date, customer, discount, items_data, notes,
                     payment = linked[0]
                     payment.amount = total
                     payment.customer = None
+                    payment.date = date
                     payment.updated_by = user
                     payment._change_reason = reason
                     payment.save()
@@ -298,6 +344,16 @@ def update_sale(sale, user, date, customer, discount, items_data, notes,
                 payment._change_reason = reason
                 payment.save()
 
+        # A sale's date moves its linked payments to the same date, so
+        # daily cash stays on the right day. (The walk-in branch above
+        # already set the date on its payment.)
+        for payment in linked:
+            if payment.date != date:
+                payment.date = date
+                payment.updated_by = user
+                payment._change_reason = reason
+                payment.save()
+
         warning = False
         if customer is not None:
             allocation = allocate_customer(customer)
@@ -317,12 +373,18 @@ def delete_sale(sale, user, reason=""):
 
 
 def create_payment(user, customer, date, amount, method, reference="",
-                   change_reason="Created"):
+                   change_reason="Created", sale=None):
     not_future_date(date, "Payment date")
     if amount <= 0:
         raise ValidationError("Payment amount must be more than zero.")
+    if customer is None and sale is None:
+        raise ValidationError(
+            "A standalone payment needs a customer. A payment with no "
+            "customer is only possible on a walk-in sale, recorded on "
+            "the sale form."
+        )
     payment = Payment(
-        customer=customer, date=date, amount=amount,
+        customer=customer, sale=sale, date=date, amount=amount,
         method=method, reference=reference,
         created_by=user, updated_by=user,
     )
@@ -333,12 +395,26 @@ def create_payment(user, customer, date, amount, method, reference="",
 
 def update_payment(payment, user, date, amount, method, reference, reason,
                    form_version):
+    """Edit a payment. The customer can never change here (delete and
+    re-enter instead) — update_payment takes no customer argument at all,
+    so a payment can never drift away from its sale's customer. A
+    payment linked to a walk-in sale has its amount locked: it follows
+    the sale total through sale edit. A payment linked to a credit sale
+    may change amount, with a reason (the edit form requires one)."""
     not_future_date(date, "Payment date")
     if amount <= 0:
         raise ValidationError("Payment amount must be more than zero.")
     with transaction.atomic():
         locked = Payment.all_objects.select_for_update().get(pk=payment.pk)
         check_version(locked, form_version)
+        if locked.sale_id is not None:
+            sale = Sale.all_objects.select_for_update().get(pk=locked.sale_id)
+            if sale.customer_id is None and amount != locked.amount:
+                raise ValidationError(
+                    "This payment belongs to a walk-in sale and its amount "
+                    "cannot be changed here. Edit the sale instead — the "
+                    "payment follows the sale total."
+                )
         locked.date = date
         locked.amount = amount
         locked.method = method

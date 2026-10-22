@@ -12,7 +12,8 @@ from django.views import View
 from django.views.generic import ListView
 
 from core.permissions import PermissionRequiredMixin
-from core.services import ConcurrentEditError, save_form_with_version
+from core.params import parse_int
+from core.services import ConcurrentEditError
 from customers.models import Customer
 from sales.forms import PaymentForm, ProductForm, SaleForm, SaleItemFormSet
 from sales.models import Payment, Product, Sale
@@ -23,6 +24,7 @@ from sales.services import (
     create_sale,
     delete_payment,
     delete_sale,
+    update_payment,
     update_sale,
 )
 
@@ -155,7 +157,7 @@ class SaleListView(PermissionRequiredMixin, ListView):
             qs = qs.filter(
                 Q(invoice_number__icontains=q) | Q(customer__name__icontains=q)
             )
-        customer_id = self.request.GET.get("customer", "")
+        customer_id = parse_int(self.request.GET.get("customer", ""))
         if customer_id:
             qs = qs.filter(customer_id=customer_id)
         return qs.order_by("-date", "-id")
@@ -393,7 +395,7 @@ class PaymentListView(PermissionRequiredMixin, ListView):
 
     def get_queryset(self):
         qs = Payment.objects.select_related("customer", "sale")
-        customer_id = self.request.GET.get("customer", "")
+        customer_id = parse_int(self.request.GET.get("customer", ""))
         if customer_id:
             qs = qs.filter(customer_id=customer_id)
         return qs.order_by("-date", "-id")
@@ -423,29 +425,53 @@ class PaymentCreateView(PermissionRequiredMixin, View):
     def post(self, request):
         form = PaymentForm(request.POST)
         if form.is_valid():
-            try:
-                payment = create_payment(
-                    user=request.user,
-                    customer=form.cleaned_data["customer"],
-                    date=form.cleaned_data["date"],
-                    amount=form.cleaned_data["amount"],
-                    method=form.cleaned_data["method"],
-                    reference=form.cleaned_data["reference"],
+            customer = form.cleaned_data["customer"]
+            if customer is None:
+                # A standalone payment with no customer used to save and
+                # then crash on the redirect, leaving an orphan payment
+                # counted as collected cash. Refuse it here instead.
+                form.add_error(
+                    "customer",
+                    "Choose a customer. A payment with no customer is "
+                    "only possible on a walk-in sale, recorded on the "
+                    "sale form.",
                 )
-            except ValidationError as exc:
-                form.add_error(None, exc)
             else:
-                allocation = allocate_customer(payment.customer)
-                if allocation["balance"] < 0:
-                    messages.warning(
-                        request,
-                        "This payment is more than the balance. The excess "
-                        "is kept as advance credit.")
-                messages.success(request, "Payment recorded.")
-                return redirect("customers:detail", pk=payment.customer.pk)
+                try:
+                    payment = create_payment(
+                        user=request.user,
+                        customer=customer,
+                        date=form.cleaned_data["date"],
+                        amount=form.cleaned_data["amount"],
+                        method=form.cleaned_data["method"],
+                        reference=form.cleaned_data["reference"],
+                    )
+                except ValidationError as exc:
+                    form.add_error(None, exc)
+                else:
+                    allocation = allocate_customer(payment.customer)
+                    if allocation["balance"] < 0:
+                        messages.warning(
+                            request,
+                            "This payment is more than the balance. The excess "
+                            "is kept as advance credit.")
+                    messages.success(request, "Payment recorded.")
+                    return redirect("customers:detail", pk=payment.customer.pk)
         return render(request, "sales/payment_form.html", {
             "form": form, "title": "Record payment",
         })
+
+
+def _lock_payment_fields(form, payment):
+    """A3: the customer of a payment can never change on edit (delete
+    and re-enter instead), so the field is disabled. A walk-in sale's
+    payment amount is locked too — it follows the sale total through
+    sale edit. The service enforces both rules as well, so a crafted
+    request cannot bypass the disabled fields."""
+    form.fields["customer"].disabled = True
+    if (payment.sale_id is not None and payment.sale is not None
+            and payment.sale.customer_id is None):
+        form.fields["amount"].disabled = True
 
 
 class PaymentUpdateView(PermissionRequiredMixin, View):
@@ -454,6 +480,7 @@ class PaymentUpdateView(PermissionRequiredMixin, View):
     def get(self, request, pk):
         payment = get_object_or_404(Payment, pk=pk)
         form = PaymentForm(instance=payment, require_reason=True)
+        _lock_payment_fields(form, payment)
         return render(request, "sales/payment_form.html", {
             "form": form, "title": "Edit payment", "payment": payment,
         })
@@ -461,13 +488,23 @@ class PaymentUpdateView(PermissionRequiredMixin, View):
     def post(self, request, pk):
         payment = get_object_or_404(Payment, pk=pk)
         form = PaymentForm(request.POST, instance=payment, require_reason=True)
+        _lock_payment_fields(form, payment)
         if form.is_valid():
             try:
-                saved = save_form_with_version(
-                    form, request.user, form.cleaned_data["reason"]
+                saved = update_payment(
+                    payment, request.user,
+                    form.cleaned_data["date"],
+                    form.cleaned_data["amount"],
+                    form.cleaned_data["method"],
+                    form.cleaned_data["reference"],
+                    form.cleaned_data["reason"],
+                    form.cleaned_data.get("version"),
                 )
-            except ConcurrentEditError as exc:
-                form.add_error(None, str(exc))
+            except (ValidationError, ConcurrentEditError) as exc:
+                form.add_error(
+                    None,
+                    str(exc) if isinstance(exc, ConcurrentEditError) else exc,
+                )
             else:
                 messages.success(request, "Payment updated.")
                 target = (

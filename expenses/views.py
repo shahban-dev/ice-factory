@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 from django.views.generic import ListView
 
+from core.params import parse_date, parse_int
 from core.permissions import PermissionRequiredMixin
 from expenses.forms import ExpenseCategoryForm, ExpenseForm
 from expenses.models import Expense, ExpenseCategory
@@ -102,11 +103,11 @@ class ExpenseListView(PermissionRequiredMixin, ListView):
 
     def get_queryset(self):
         qs = Expense.objects.select_related("category")
-        category_id = self.request.GET.get("category", "")
+        category_id = parse_int(self.request.GET.get("category", ""))
         if category_id:
             qs = qs.filter(category_id=category_id)
-        date_from = self.request.GET.get("from", "")
-        date_to = self.request.GET.get("to", "")
+        date_from = parse_date(self.request.GET.get("from", ""))
+        date_to = parse_date(self.request.GET.get("to", ""))
         if date_from:
             qs = qs.filter(date__gte=date_from)
         if date_to:

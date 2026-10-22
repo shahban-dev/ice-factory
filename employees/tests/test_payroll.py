@@ -184,9 +184,47 @@ class EmployeeRuleTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn(f"/employees/{employee.pk}/", response["Location"])
         self.assertTrue(Employee.objects.filter(pk=employee.pk).exists())
-        # Deactivate instead works.
+        # Deactivate instead works — but only once a leaving date is set.
+        response = self.client.post(
+            reverse("employees:delete", args=[employee.pk]),
+            {"action": "deactivate"})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(f"/employees/{employee.pk}/edit/", response["Location"])
+        self.assertTrue(Employee.objects.get(pk=employee.pk).is_active)
+        employee.leaving_date = date(2026, 10, 10)
+        employee.save()
         response = self.client.post(
             reverse("employees:delete", args=[employee.pk]),
             {"action": "deactivate"})
         self.assertEqual(response.status_code, 302)
         self.assertFalse(Employee.objects.get(pk=employee.pk).is_active)
+
+
+class LeaverPayrollTests(TestCase):
+    """A4: eligibility is decided by dates, not by is_active."""
+
+    def test_leaver_gets_last_partial_month(self):
+        admin = make_admin()
+        employee = make_employee(
+            name="Leaver", salary="30000", joined=date(2025, 1, 1),
+            left=date(2026, 10, 10))
+        employee.is_active = False
+        employee.save()
+        generate_payroll(admin, 2026, 10)
+        row = Payroll.objects.get(employee=employee, year=2026, month=10)
+        self.assertEqual(row.days_employed, 10)
+        self.assertEqual(row.base_salary, Decimal("9677.42"))
+        # November: the employee was not employed at all that month, so
+        # proration says None (November itself cannot be generated yet
+        # from October — the future-month guard blocks it).
+        from employees.services import compute_proration
+        self.assertIsNone(compute_proration(employee, 2026, 11))
+
+    def test_inactive_without_leaving_date_excluded_and_warned(self):
+        admin = make_admin()
+        employee = make_employee(name="NoDate")
+        employee.is_active = False
+        employee.save()
+        result = generate_payroll(admin, 2026, 10)
+        self.assertIn("NoDate", result["warnings"])
+        self.assertFalse(Payroll.objects.filter(employee=employee).exists())

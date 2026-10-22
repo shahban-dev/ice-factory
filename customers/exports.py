@@ -20,6 +20,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from core.excel import safe_cell
 from core.models import get_settings
 from core.money import format_rs
+from core.pdf_text import para_text
 
 
 def _period_label(date_from, date_to):
@@ -42,10 +43,16 @@ def ledger_pdf_response(customer, rows, date_from, date_to):
         title=f"Ledger — {customer.name}",
     )
     story = [
-        Paragraph(f"<b>{factory.factory_name}</b>", styles["Title"]),
-        Paragraph(f"{factory.address}<br/>{factory.phone}", styles["Normal"]),
+        Paragraph(f"<b>{para_text(factory.factory_name)}</b>", styles["Title"]),
+        Paragraph(
+            f"{para_text(factory.address)}<br/>{para_text(factory.phone)}",
+            styles["Normal"],
+        ),
         Spacer(1, 4 * mm),
-        Paragraph(f"<b>Customer ledger — {customer.name}</b>", styles["Heading2"]),
+        Paragraph(
+            f"<b>Customer ledger — {para_text(customer.name)}</b>",
+            styles["Heading2"],
+        ),
         Paragraph(
             f"Phone: {customer.phone or '—'} &nbsp;|&nbsp; "
             f"Period: {_period_label(date_from, date_to)}",

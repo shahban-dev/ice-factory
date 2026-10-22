@@ -1,7 +1,6 @@
 """Phase 4 views: reports, audit log, recycle bin, settings, backups."""
 
 import calendar
-from datetime import date
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -12,6 +11,7 @@ from django.utils import timezone
 from django.views import View
 
 from core.models import BackupLog, get_settings
+from core.params import parse_date, parse_int
 from core.permissions import PermissionRequiredMixin
 from customers.models import Customer
 from expenses.models import ExpenseCategory
@@ -39,23 +39,16 @@ class ReportsIndexView(PermissionRequiredMixin, View):
         return render(request, "reports/index.html")
 
 
-def _parse_date(value, default):
-    try:
-        year, month, day = (int(part) for part in value.split("-"))
-        return date(year, month, day)
-    except (ValueError, AttributeError):
-        return default
-
-
 def _month_params(request):
+    """Year/month from the query string, falling back to today for
+    anything invalid (letters, month 13, a 30-digit year)."""
     today = timezone.localdate()
-    try:
-        year = int(request.GET.get("year", today.year))
-        month = int(request.GET.get("month", today.month))
-    except ValueError:
-        year, month = today.year, today.month
-    if not 1 <= month <= 12:
-        year, month = today.year, today.month
+    year = parse_int(request.GET.get("year"), today.year)
+    month = parse_int(request.GET.get("month"), today.month)
+    if year is None or not 1 <= year <= 9999:
+        year = today.year
+    if month is None or not 1 <= month <= 12:
+        month = today.month
     return year, month
 
 
@@ -95,8 +88,8 @@ class SalesRegisterView(PermissionRequiredMixin, View):
     def get(self, request):
         today = timezone.localdate()
         first = today.replace(day=1)
-        date_from = _parse_date(request.GET.get("from"), first)
-        date_to = _parse_date(request.GET.get("to"), today)
+        date_from = parse_date(request.GET.get("from"), first)
+        date_to = parse_date(request.GET.get("to"), today)
         customer_id = request.GET.get("customer", "")
         product_id = request.GET.get("product", "")
         sales = sales_register(date_from, date_to, customer_id, product_id)
@@ -119,8 +112,8 @@ class ExpenseReportView(PermissionRequiredMixin, View):
     def get(self, request):
         today = timezone.localdate()
         first = today.replace(day=1)
-        date_from = _parse_date(request.GET.get("from"), first)
-        date_to = _parse_date(request.GET.get("to"), today)
+        date_from = parse_date(request.GET.get("from"), first)
+        date_to = parse_date(request.GET.get("to"), today)
         category_id = request.GET.get("category", "")
         data = expense_report(date_from, date_to, category_id)
         fmt = request.GET.get("format", "")
@@ -148,8 +141,8 @@ class AuditLogView(PermissionRequiredMixin, View):
         entries = audit_entries(
             user_id=user_id or None,
             model_name=model_name or None,
-            date_from=_parse_date(date_from, None) if date_from else None,
-            date_to=_parse_date(date_to, None) if date_to else None,
+            date_from=parse_date(date_from),
+            date_to=parse_date(date_to),
             object_text=object_text,
         )
         paginator = Paginator(entries, 25)

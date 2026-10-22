@@ -58,12 +58,33 @@ def parse_import_file(uploaded_file):
         }
         if not row["name"]:
             row["error"] = "Name is required."
+        elif len(row["name"]) > 200:
+            row["error"] = "Name is too long (maximum 200 characters)."
+        if len(row["address"]) > 1000:
+            row["error"] = "Address is too long (maximum 1000 characters)."
         balance_raw = (raw.get("opening_balance") or "").strip()
         if balance_raw:
             try:
-                row["opening_balance"] = Decimal(balance_raw.replace(",", ""))
+                value = Decimal(balance_raw.replace(",", ""))
             except InvalidOperation:
                 row["error"] = "Opening balance is not a number."
+            else:
+                # These used to pass the preview and crash the confirm
+                # step (NaN, Infinity and huge values blow up the
+                # database column), rolling back the whole import.
+                if not value.is_finite():
+                    row["error"] = "Opening balance must be a real number."
+                elif abs(value) > Decimal("9999999999.99"):
+                    row["error"] = (
+                        "Opening balance is too large "
+                        "(maximum Rs 9,999,999,999.99)."
+                    )
+                elif value != value.quantize(Decimal("0.01")):
+                    row["error"] = (
+                        "Opening balance must have at most 2 decimal places."
+                    )
+                else:
+                    row["opening_balance"] = value
         if row["phone"]:
             try:
                 validate_phone(row["phone"])

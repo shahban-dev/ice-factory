@@ -190,6 +190,16 @@ class Payment(BaseModel):
                 check=models.Q(amount__gt=0),
                 name="payment_amount_positive",
             ),
+            # A payment must belong to someone or to a sale. An orphan
+            # (neither) is money with no owner: it used to be counted as
+            # collected cash while belonging to nobody.
+            models.CheckConstraint(
+                check=(
+                    models.Q(customer__isnull=False)
+                    | models.Q(sale__isnull=False)
+                ),
+                name="payment_needs_customer_or_sale",
+            ),
         ]
 
     def __str__(self):

@@ -17,6 +17,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from core.excel import safe_cell
 from core.models import get_settings
 from core.money import format_rs
+from core.pdf_text import para_text
 
 DEFINITIONS = (
     "Definitions: Billed = sum of sale totals by sale date (opening balances "
@@ -39,10 +40,13 @@ def _pdf_response(title, filename, story_bits):
         title=title,
     )
     story = [
-        Paragraph(f"<b>{factory.factory_name}</b>", styles["Title"]),
-        Paragraph(f"{factory.address}<br/>{factory.phone}", styles["Normal"]),
+        Paragraph(f"<b>{para_text(factory.factory_name)}</b>", styles["Title"]),
+        Paragraph(
+            f"{para_text(factory.address)}<br/>{para_text(factory.phone)}",
+            styles["Normal"],
+        ),
         Spacer(1, 5 * mm),
-        Paragraph(f"<b>{title}</b>", styles["Heading1"]),
+        Paragraph(f"<b>{para_text(title)}</b>", styles["Heading1"]),
     ]
     story.extend(story_bits)
     story.append(Spacer(1, 6 * mm))
@@ -62,7 +66,10 @@ def _table(headers, rows):
     styles = getSampleStyleSheet()
     data = [[Paragraph(f"<b>{h}</b>", styles["Normal"]) for h in headers]]
     for row in rows:
-        data.append([Paragraph(str(c), styles["Normal"]) for c in row])
+        # para_text shapes Arabic-script cells (customer/product names)
+        # and escapes everything, so a stray "&" can no longer break the
+        # Paragraph parser. Latin cells pass through unchanged.
+        data.append([Paragraph(para_text(str(c)), styles["Normal"]) for c in row])
     table = Table(data, repeatRows=1)
     table.setStyle(TableStyle([
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
@@ -121,7 +128,7 @@ def monthly_pdf(data):
         Spacer(1, 4 * mm),
         Paragraph("<b>Top 10 customers by billed</b>", styles["Heading2"]),
         _table(["Customer", "Billed"], [
-            [r["sale__customer__name"], format_rs(r["total"])]
+            [r["customer__name"], format_rs(r["total"])]
             for r in data["top_customers"]
         ]),
     ]
@@ -148,7 +155,7 @@ def monthly_excel(data):
     rows.extend([[r["product__name"], r["qty"]] for r in data["blocks"]])
     rows.append([])
     rows.append(["Top 10 customers by billed", ""])
-    rows.extend([[r["sale__customer__name"], float(r["total"])] for r in data["top_customers"]])
+    rows.extend([[r["customer__name"], float(r["total"])] for r in data["top_customers"]])
     return _excel_response(
         f"monthly-{data['year']}-{data['month']:02d}.xlsx",
         ["Measure", "Amount"], rows)

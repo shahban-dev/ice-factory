@@ -3,6 +3,10 @@
 db.sqlite3
 *.sqlite3
 
+# Decoded PDF fonts: the repo ships core/fonts/*.ttf.b64 (text, so it
+# can be pushed), and the app decodes them to .ttf on first use.
+core/fonts/*.ttf
+
 # Python
 __pycache__/
 *.py[cod]

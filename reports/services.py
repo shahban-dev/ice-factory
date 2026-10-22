@@ -18,44 +18,43 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from customers.models import Customer
+from core.params import parse_int
 from employees.models import Payroll
 from expenses.models import Expense
 from sales.models import Payment, Sale, SaleItem
-from sales.services import allocate_customer, annotate_customer_balances
+from sales.services import (
+    allocate_customer,
+    annotate_customer_balances,
+    annotate_sale_totals,
+)
+
+
+def billed_between(start, end):
+    """ONE source of truth for billed in a date range: the sum of
+    NON-deleted sale totals (items minus discount). Sale.objects is the
+    default manager, which hides soft-deleted sales, so a deleted sale's
+    lines can never leak in — SaleItem itself carries no soft-delete
+    flag, which is exactly how the old item-sum code went wrong."""
+    total = (
+        annotate_sale_totals(
+            Sale.objects.filter(date__gte=start, date__lte=end)
+        ).aggregate(
+            total=Sum("total_annotated", output_field=DecimalField())
+        )["total"]
+    )
+    return total or Decimal("0")
 
 
 def balances_at(at_date=None):
-    """Customers annotated with balance as of a date (or today if None).
-    Only positive balances count as dues; negatives are advance credit."""
-    sales_sq = SaleItem.objects.filter(
-        sale__customer_id=OuterRef("pk")
-    )
-    payments_sq = Payment.objects.filter(customer_id=OuterRef("pk"))
-    if at_date is not None:
-        sales_sq = sales_sq.filter(sale__date__lte=at_date)
-        payments_sq = payments_sq.filter(date__lte=at_date)
-    sales_sq = sales_sq.values("sale__customer_id").annotate(
-        total=Sum(
-            F("quantity") * F("unit_price"),
-            output_field=DecimalField(),
-        )
-    ).values("total")
-    payments_sq = payments_sq.values("customer_id").annotate(
-        total=Sum("amount")
-    ).values("total")
-    qs = Customer.objects.annotate(
-        billed_to_date=Coalesce(
-            Subquery(sales_sq, output_field=DecimalField()), Decimal("0")
-        ),
-        paid_to_date=Coalesce(
-            Subquery(payments_sq, output_field=DecimalField()), Decimal("0")
-        ),
-    )
+    """Customers with balance as of a date (or today if None), from the
+    same logic as annotate_customer_balances. The billed_to_date /
+    paid_to_date / balance_at names are kept for callers that use them;
+    they are the same values as billed / paid / balance."""
+    qs = annotate_customer_balances(Customer.objects.all(), at_date=at_date)
     for customer in qs:
-        customer.balance_at = (
-            customer.opening_balance + customer.billed_to_date
-            - customer.paid_to_date
-        )
+        customer.balance_at = customer.balance
+        customer.billed_to_date = customer.billed
+        customer.paid_to_date = customer.paid
     return qs
 
 
@@ -66,16 +65,6 @@ def total_outstanding(at_date=None):
         if customer.balance_at > 0:
             total += customer.balance_at
     return total
-
-
-def _sum_sales_between(start, end):
-    totals = SaleItem.objects.filter(
-        sale__date__gte=start, sale__date__lte=end
-    ).aggregate(total=Sum(
-        F("quantity") * F("unit_price"),
-        output_field=DecimalField(),
-    ))
-    return totals["total"] or Decimal("0")
 
 
 def _sum_payments_between(start, end):
@@ -97,7 +86,7 @@ def month_figures(year, month):
     first, last = date(year, month, 1), date(
         year, month, calendar.monthrange(year, month)[1]
     )
-    billed = _sum_sales_between(first, last)
+    billed = billed_between(first, last)
     collected = _sum_payments_between(first, last)
     expenses = _sum_expenses_between(first, last)
     return {
@@ -140,7 +129,7 @@ def dashboard_data():
     debtors.sort(key=lambda c: c.balance, reverse=True)
     return {
         "today": today,
-        "today_billed": _sum_sales_between(today, today),
+        "today_billed": billed_between(today, today),
         "today_collected": _sum_payments_between(today, today),
         "total_outstanding": total_outstanding(),
         "month": month,
@@ -197,22 +186,34 @@ def monthly_report(year, month):
             date__gte=first, date__lte=last, category__is_system=True
         ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
     )
-    # Blocks sold per product.
+    # Blocks sold per product. SaleItem has no soft-delete flag, so the
+    # sale itself must be filtered: a deleted sale's lines must not count.
     blocks = (
-        SaleItem.objects.filter(sale__date__gte=first, sale__date__lte=last)
+        SaleItem.objects.filter(
+            sale__date__gte=first, sale__date__lte=last,
+            sale__is_deleted=False,
+        )
         .values("product__name")
         .annotate(qty=Sum("quantity"))
         .order_by("-qty")
     )
-    # Top 10 customers by billed.
+    # Top 10 customers by billed. Billed is per-sale totals (items minus
+    # discount) over non-deleted sales — the same definition as
+    # billed_between — so it is grouped from sales, not from item lines.
+    _items_sum = (
+        SaleItem.objects.filter(sale=OuterRef("pk"))
+        .values("sale")
+        .annotate(s=Sum(
+            F("quantity") * F("unit_price"), output_field=DecimalField()))
+        .values("s")
+    )
     billed_by_customer = (
-        SaleItem.objects.filter(sale__date__gte=first, sale__date__lte=last)
-        .exclude(sale__customer__isnull=True)
-        .values("sale__customer__id", "sale__customer__name")
+        Sale.objects.filter(
+            date__gte=first, date__lte=last, customer__isnull=False)
+        .annotate(st=Subquery(_items_sum, output_field=DecimalField()))
+        .values("customer__id", "customer__name")
         .annotate(total=Sum(
-            F("quantity") * F("unit_price"),
-            output_field=DecimalField(),
-        ))
+            F("st") - F("discount"), output_field=DecimalField()))
         .order_by("-total")[:10]
     )
     outstanding = total_outstanding(at_date=last)
@@ -253,10 +254,14 @@ def dues_report():
 
 
 def sales_register(date_from, date_to, customer_id=None, product_id=None):
-    """Sales in a date range, optionally filtered by customer or product."""
+    """Sales in a date range, optionally filtered by customer or product.
+    Raw query-string values are parsed safely: an invalid id is ignored,
+    never a 500."""
     qs = Sale.objects.select_related("customer").prefetch_related(
         "items__product"
     ).filter(date__gte=date_from, date__lte=date_to)
+    customer_id = parse_int(customer_id)
+    product_id = parse_int(product_id)
     if customer_id:
         qs = qs.filter(customer_id=customer_id)
     if product_id:
@@ -265,10 +270,12 @@ def sales_register(date_from, date_to, customer_id=None, product_id=None):
 
 
 def expense_report(date_from, date_to, category_id=None):
-    """Expenses in a range, optionally filtered by category, with totals."""
+    """Expenses in a range, optionally filtered by category, with totals.
+    An invalid category id is ignored, never a 500."""
     qs = Expense.objects.select_related("category").filter(
         date__gte=date_from, date__lte=date_to
     )
+    category_id = parse_int(category_id)
     if category_id:
         qs = qs.filter(category_id=category_id)
     qs = qs.order_by("date", "id")

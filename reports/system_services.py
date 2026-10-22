@@ -10,8 +10,10 @@ different live expense (that would double-count the salary).
 import datetime as _datetime
 
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from core.params import parse_int
 from core.services import restore_delete_batch
 from customers.models import Customer
 from employees.models import Employee, Payroll
@@ -61,6 +63,9 @@ def audit_entries(user_id=None, model_name=None, date_from=None,
     entries = []
     for model, label in AUDIT_MODELS:
         history = model.history.all()
+        if user_id:
+            # A hand-edited ?user=abc is ignored, never a 500.
+            user_id = parse_int(user_id)
         if user_id:
             history = history.filter(history_user_id=user_id)
         if model_name and model_name != label:
@@ -118,6 +123,22 @@ def recycle_bin_entries():
     return entries
 
 
+def _ensure_sale_customers_live(sales):
+    """Refuse to restore sales whose customer is deleted: a live sale
+    for a deleted customer would be invisible everywhere yet still
+    counted nowhere — worse than staying in the bin."""
+    for sale in sales:
+        if sale.customer_id is None:
+            continue
+        customer = Customer.all_objects.filter(
+            pk=sale.customer_id).first()
+        if customer is not None and customer.is_deleted:
+            raise ValidationError(
+                f"Cannot restore sale {sale}: its customer is deleted. "
+                "Restore the customer first."
+            )
+
+
 def restore_from_bin(model_key, pk, user):
     """Restore one bin entry, applying the batch and payroll guards.
     Returns a message describing what was restored."""
@@ -125,10 +146,41 @@ def restore_from_bin(model_key, pk, user):
     model = model_map.get(model_key)
     if model is None:
         raise ValidationError("Unknown record type.")
+    pk = parse_int(pk)
+    if pk is None:
+        raise ValidationError("That record is not in the recycle bin.")
     obj = model.all_objects.filter(pk=pk, is_deleted=True).first()
     if obj is None:
         raise ValidationError("That record is not in the recycle bin.")
+    try:
+        # Own savepoint: a constraint failure here must roll back only
+        # this restore, not poison the caller's transaction (in tests,
+        # and under ATOMIC_REQUESTS, a bare IntegrityError would make
+        # every later query in the request fail).
+        with transaction.atomic():
+            return _restore_from_bin(model, obj, user)
+    except IntegrityError:
+        # Unique conflicts the bin cannot resolve on its own: a live
+        # payroll row for the same employee and month, or a live
+        # employee already using the same CNIC.
+        if model is Payroll:
+            raise ValidationError(
+                "Cannot restore: a live payroll row already exists for "
+                "this employee and month."
+            )
+        if model is Employee:
+            raise ValidationError(
+                "Cannot restore: another active employee already uses "
+                "this CNIC."
+            )
+        raise ValidationError(
+            "Cannot restore this record: it conflicts with a live record."
+        )
+
+
+def _restore_from_bin(model, obj, user):
     if model is Sale and obj.delete_batch is not None:
+        _ensure_sale_customers_live([obj])
         restored = restore_delete_batch(
             obj.delete_batch, user, [Sale, Payment]
         )
@@ -136,9 +188,10 @@ def restore_from_bin(model_key, pk, user):
     if model is Payment and obj.delete_batch:
         # A payment deleted with its sale cannot live without the sale:
         # restore the whole batch (sale + its payments).
-        if Sale.all_objects.filter(
-            delete_batch=obj.delete_batch, is_deleted=True
-        ).exists():
+        batch_sales = list(Sale.all_objects.filter(
+            delete_batch=obj.delete_batch, is_deleted=True))
+        if batch_sales:
+            _ensure_sale_customers_live(batch_sales)
             restored = restore_delete_batch(
                 obj.delete_batch, user, [Sale, Payment]
             )

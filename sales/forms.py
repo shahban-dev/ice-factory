@@ -38,8 +38,12 @@ class SaleForm(VersionedFormMixin, forms.ModelForm):
         help_text="Required when editing.",
     )
     # Money received with this sale. 0 means "Paid nothing".
+    # max_digits/decimal_places are set explicitly: without them a
+    # value like 0.001 passed validation and then crashed the save
+    # (it rounds to 0.00 and trips the payment amount CHECK).
     paid_now = forms.DecimalField(
         required=False, min_value=0, initial=0,
+        max_digits=12, decimal_places=2,
         widget=forms.NumberInput(attrs={"inputmode": "decimal", "step": "0.01"}),
     )
     paid_method = forms.ChoiceField(

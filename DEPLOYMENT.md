@@ -113,10 +113,16 @@ Then:
 
 ```bash
 python manage.py migrate
+# Note: migration sales.0002 requires every payment to have a customer
+# or a sale, and hard-deletes any orphan payments already in the
+# database (their audit history rows are kept). On a fresh install
+# there is nothing to delete.
 python manage.py collectstatic --noinput
 # Decode the PWA icons (they ship as base64 text because the GitHub
 # App cannot push binary files):
 for f in static/icons/*.b64; do base64 -d "$f" > "${f%.b64}"; done
+# The Urdu PDF fonts (core/fonts/*.b64) need no manual step: the app
+# decodes them to .ttf on first use.
 python manage.py createsuperuser   # the first admin user
 python manage.py check --deploy    # must report no issues
 ```
@@ -178,6 +184,11 @@ server {
 `X-Forwarded-For` and `X-Forwarded-Proto` matter: the app reads the
 client IP from the forwarded header for the login lockout, and trusts
 the forwarded protocol for HTTPS detection (`SECURE_PROXY_SSL_HEADER`).
+
+Never expose gunicorn directly: the login lockout trusts the last
+`X-Forwarded-For` entry, so a directly exposed gunicorn would let a
+spoofed header bypass the lockout. It must stay on 127.0.0.1 behind
+Nginx, as configured above.
 
 ```bash
 sudo ln -s /etc/nginx/sites-available/icefactory /etc/nginx/sites-enabled/

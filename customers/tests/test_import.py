@@ -71,3 +71,39 @@ class ImportParseTests(TestCase):
         big = "name,phone\n" + ("Shop,0300-1111111\n" * 6000)
         with self.assertRaises(ValidationError):
             parse_import_file(csv_file(big))
+
+
+class ImportValidationFixTests(TestCase):
+    """A5: values that used to pass the preview and crash the confirm
+    step (500 + whole import rolled back) are now row errors, and
+    valid rows still import."""
+
+    def test_nan_infinity_huge_and_long_names_flagged(self):
+        long_name = "N" * 201
+        rows = parse_import_file(csv_file(
+            "name,phone,address,opening_balance\n"
+            "NaN Shop,0300-1111111,,NaN\n"
+            "Inf Shop,0300-2222222,,Infinity\n"
+            "Huge Shop,0300-3333333,,99999999999999999\n"
+            "Exp Shop,0300-4444444,,1e400\n"
+            f"{long_name},0300-5555555,,100\n"
+            "Three DP,0300-6666666,,100.005\n"
+            "Good Shop,0300-7777777,,100\n"
+        ))
+        self.assertEqual(len(rows), 7)
+        for row in rows[:6]:
+            with self.subTest(row=row["name"][:20]):
+                self.assertIsNotNone(row["error"])
+        self.assertIsNone(rows[6]["error"])
+        saved = save_import_rows(rows, make_admin())
+        self.assertEqual(saved, 1)
+        self.assertTrue(Customer.objects.filter(name="Good Shop").exists())
+        self.assertFalse(Customer.objects.filter(name="NaN Shop").exists())
+
+    def test_negative_balance_still_allowed(self):
+        rows = parse_import_file(csv_file(
+            "name,phone,address,opening_balance\n"
+            "Credit Shop,0300-1111111,,-5000\n"
+        ))
+        self.assertIsNone(rows[0]["error"])
+        self.assertEqual(rows[0]["opening_balance"], -5000)

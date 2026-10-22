@@ -49,8 +49,12 @@ download it as PDF or Excel.
 **Importing existing customers:** Customers → Import. Upload an Excel
 or CSV file (maximum 5 MB, 5,000 rows) with columns name, phone,
 address, opening_balance. You see a preview first: rows with errors are
-marked, duplicates are warned about. Nothing is saved until you confirm.
-If a row has an error, that row is skipped but the good rows still save.
+marked, duplicates are warned about. A row is rejected in the preview
+if its opening balance is not a plain number (values like NaN or
+Infinity do not pass), is larger than Rs 9,999,999,999.99, has more
+than 2 decimal places, or the name is longer than 200 characters.
+Nothing is saved until you confirm. If a row has an error, that row is
+skipped but the good rows still save.
 
 **Deleting a customer:** a customer with sales, payments or a non-zero
 balance cannot be deleted — the screen tells you and offers
@@ -82,21 +86,25 @@ number. A deleted invoice's number is never reused, and a deleted
 invoice prints with CANCELLED across it.
 
 **What "paid" means:** a sale shows as paid, partial or unpaid based on
-ALL of the customer's payments, not just the payment made on that sale.
-Payments are applied to the oldest debt first: opening balance, then
-the oldest sale, then the next. So if a customer owed from before and
-pays today, the payment may settle the old debt first — the new invoice
-can still show as partial. This is by design, and the ledger shows
-exactly where every rupee went.
+the payments made on that sale first, then on the customer's older
+debts. A payment entered with a sale pays THAT sale first (up to its
+total); any extra settles the customer's older debts. A general
+payment (entered on the payment screen, not tied to a sale) settles
+the oldest debt first: opening balance, then the oldest sale. So a
+new sale paid in full at the counter shows as paid even if the
+customer still owes from before — the old debt stays on the ledger,
+and the invoice's "Customer's total outstanding" line shows it.
 
 **Walk-in sales** (no customer) must be paid in full at the time of
 sale — there is nobody to owe the balance.
 
 **Editing a sale:** open the sale and press Edit. You must write a
 reason (it is kept in the audit log). Changing the customer moves the
-payments made on that sale to the new customer. If two people edit the
-same record at once, the second one is stopped with a message naming
-who changed it and when — reload and try again.
+payments made on that sale to the new customer. Changing the sale's
+date moves its payments to the new date as well, so daily cash stays
+correct. If two people edit the same record at once, the second one
+is stopped with a message naming who changed it and when — reload and
+try again.
 
 **Deleting a sale:** the sale and the payments entered with it go to
 the recycle bin together. Payments the customer made separately (on the
@@ -107,21 +115,30 @@ The invoice shows the factory name, address and phone, the invoice
 number and date, the customer (or "Walk-in / Cash"), the items,
 subtotal, discount, total, how much was received with this sale, how
 much is still unpaid on this invoice, and the customer's total
-outstanding at the time of printing.
+outstanding at the time of printing. For the sharpest print, use the
+browser's print function on the invoice page — that is the
+recommended path. The PDF download prints the same invoice, and
+Urdu names and addresses print correctly in it (as in every PDF in
+the system).
 
 ## Payments
 
 Sales → Payments → Record payment, or Quick add on the dashboard.
 
 Pick the customer, the date, the amount and the method (cash, bank
-transfer, or other). The screen shows the customer's current balance
-before you save. If you enter more than they owe, the extra stays as
-advance credit — the system warns you, but it is allowed, and the next
-sale will use it first.
+transfer, or other). A payment recorded on its own must have a
+customer — the form will not save without one. The screen shows the
+customer's current balance before you save. If you enter more than
+they owe, the extra stays as advance credit — the system warns you,
+but it is allowed, and the next sale will use it first.
 
 Payments can be edited or deleted (with a reason). A payment entered on
 a sale form belongs to that sale; a general payment belongs to the
-customer's account.
+customer's account. When you edit a payment, the customer cannot be
+changed — delete it and enter a new one instead. If the payment
+belongs to a walk-in sale, its amount cannot be changed here either:
+edit the sale instead. A payment on a credit sale can change amount,
+with a reason.
 
 ## Expenses
 
@@ -145,8 +162,14 @@ page. An employee with payroll rows cannot be deleted — deactivate
 them instead.
 
 **Monthly payroll:** Employees → Payroll → Generate for a month. The
-system creates a draft row for every active employee who worked that
-month, skipping anyone who already has a row.
+system creates a draft row for everyone who worked that month,
+decided by dates, not by whether they are still active: someone who
+joined on or before the last day of the month and left on or after
+the first day gets a row — so a person who left mid-month and was
+deactivated before payroll ran still gets their last partial month.
+Deactivating an employee requires a leaving date (the screen sends
+you to add one if it is missing). Staff deactivated without a
+leaving date are listed as a warning and get no row.
 
 - *Days employed* counts inclusively: someone who joined on the 16th of
   a 31-day month gets 16 days.
@@ -188,7 +211,8 @@ Excel. The definitions below are printed on every report.
 Definitions used everywhere:
 
 - *Billed* = sum of sale totals by sale date. Opening balances are NOT
-  billed.
+  billed. A sale total is its items minus its discount, and deleted
+  sales are not counted.
 - *Collected* = sum of payments by payment date, including payments
   toward opening balances.
 - *Expenses* = sum of expenses by expense date, including salary
@@ -197,6 +221,7 @@ Definitions used everywhere:
   Expenses.
 - *Customer balance* = opening balance + sale totals − payments.
   Positive means the customer owes; negative means advance credit.
+  Deleted sales and their payments are excluded from every figure.
 
 ## Audit log
 
@@ -211,7 +236,10 @@ Reports → Recycle bin. Everything deleted, in one place, with who
 deleted it and when. Press Restore to bring a record back. Restoring a
 sale also restores the payments deleted with it. Restoring a payment
 that was deleted with its sale restores the whole sale. Nothing is
-permanently deleted from this screen.
+permanently deleted from this screen. A restore can be refused with a
+message: a sale whose customer is still deleted cannot come back
+until the customer is restored first, and a payroll row or employee
+cannot be restored if a live row already uses that month or CNIC.
 
 ## Settings
 

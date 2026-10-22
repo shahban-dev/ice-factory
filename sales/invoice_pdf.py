@@ -29,6 +29,7 @@ from reportlab.platypus import (
 
 from core.models import get_settings
 from core.money import format_rs
+from core.pdf_text import contains_arabic, font_for, para_text, shape_text
 
 LOGO_PATH = os.path.join(settings.BASE_DIR, "static", "icons", "icon-192.png")
 
@@ -66,13 +67,13 @@ def invoice_pdf_response(sale, remaining, outstanding):
         header_cells.append(Image(LOGO_PATH, width=18 * mm, height=18 * mm))
     else:
         header_cells.append(Paragraph("", styles["Normal"]))
-    factory_lines = [f"<b>{factory.factory_name}</b>"]
+    factory_lines = [f"<b>{para_text(factory.factory_name)}</b>"]
     if factory.address:
-        factory_lines.append(factory.address)
+        factory_lines.append(para_text(factory.address))
     if factory.phone:
-        factory_lines.append(factory.phone)
+        factory_lines.append(para_text(factory.phone))
     if factory.tax_registration_line:
-        factory_lines.append(factory.tax_registration_line)
+        factory_lines.append(para_text(factory.tax_registration_line))
     header_cells.append(Paragraph("<br/>".join(factory_lines), styles["Normal"]))
     header = Table([header_cells], colWidths=[22 * mm, 140 * mm])
     header.setStyle(TableStyle([
@@ -86,7 +87,7 @@ def invoice_pdf_response(sale, remaining, outstanding):
         styles["Heading1"],
     ))
     customer_name = (
-        sale.customer.name if sale.customer else "Walk-in / Cash"
+        shape_text(sale.customer.name) if sale.customer else "Walk-in / Cash"
     )
     meta = Table([
         ["Invoice number:", sale.invoice_number, "Date:", sale.date.strftime("%d-%m-%Y")],
@@ -97,27 +98,36 @@ def invoice_pdf_response(sale, remaining, outstanding):
         ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
         ("FONTSIZE", (0, 0), (-1, -1), 10),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("FONTNAME", (1, 1), (1, 1), font_for(customer_name)),
     ]))
     story.append(meta)
     story.append(Spacer(1, 4 * mm))
 
     data = [["Product", "Qty", "Unit price", "Line total"]]
-    for item in sale.items.all():
+    items = list(sale.items.all())
+    for item in items:
         data.append([
-            item.product.name,
+            shape_text(item.product.name),
             str(item.quantity),
             format_rs(item.unit_price),
             format_rs(item.line_total),
         ])
     items_table = Table(data, colWidths=[75 * mm, 20 * mm, 32 * mm, 35 * mm])
-    items_table.setStyle(TableStyle([
+    items_style = [
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0f766e")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
         ("FONTSIZE", (0, 0), (-1, -1), 10),
         ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f1f5f9")]),
-    ]))
+    ]
+    for row_no, item in enumerate(items, start=1):
+        if contains_arabic(item.product.name):
+            items_style.append(
+                ("FONTNAME", (0, row_no), (0, row_no),
+                 font_for(item.product.name))
+            )
+    items_table.setStyle(TableStyle(items_style))
     story.append(items_table)
     story.append(Spacer(1, 4 * mm))
 
@@ -142,10 +152,10 @@ def invoice_pdf_response(sale, remaining, outstanding):
     story.append(totals_table)
     if sale.notes:
         story.append(Spacer(1, 4 * mm))
-        story.append(Paragraph(f"Notes: {sale.notes}", styles["Normal"]))
+        story.append(Paragraph(f"Notes: {para_text(sale.notes)}", styles["Normal"]))
     if factory.invoice_footer_note:
         story.append(Spacer(1, 4 * mm))
-        story.append(Paragraph(factory.invoice_footer_note, styles["Normal"]))
+        story.append(Paragraph(para_text(factory.invoice_footer_note), styles["Normal"]))
     story.append(Spacer(1, 6 * mm))
     story.append(Paragraph(
         f"Printed on {timezone.localtime(timezone.now()).strftime('%d-%m-%Y %H:%M')}",

@@ -1,9 +1,10 @@
 """Customer views: list, ledger, create, edit, delete, import, exports."""
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -11,6 +12,7 @@ from django.utils.html import format_html
 from django.views import View
 from django.views.generic import ListView
 
+from core.params import parse_date
 from core.permissions import PermissionRequiredMixin
 from core.services import ConcurrentEditError, save_form_with_version, soft_delete_objects
 from customers.forms import CustomerForm, CustomerImportUploadForm
@@ -56,8 +58,8 @@ class CustomerDetailView(PermissionRequiredMixin, View):
 
     def get(self, request, pk):
         customer = get_object_or_404(Customer, pk=pk)
-        date_from = _parse_date(request.GET.get("from"))
-        date_to = _parse_date(request.GET.get("to"))
+        date_from = parse_date(request.GET.get("from"))
+        date_to = parse_date(request.GET.get("to"))
         rows = customer_ledger_entries(customer, date_from, date_to)
         allocation = allocate_customer(customer)
         return render(request, "customers/detail.html", {
@@ -68,17 +70,6 @@ class CustomerDetailView(PermissionRequiredMixin, View):
             "date_to": request.GET.get("to", ""),
         })
 
-
-def _parse_date(value):
-    if not value:
-        return None
-    try:
-        from datetime import date as date_cls
-
-        year, month, day = (int(part) for part in value.split("-"))
-        return date_cls(year, month, day)
-    except (ValueError, AttributeError):
-        return None
 
 
 class CustomerCreateView(PermissionRequiredMixin, View):
@@ -268,7 +259,16 @@ class CustomerImportPreviewView(PermissionRequiredMixin, View):
             {**row, "opening_balance": Decimal(str(row["opening_balance"]))}
             for row in rows
         ]
-        saved = save_import_rows(parsed, request.user)
+        try:
+            saved = save_import_rows(parsed, request.user)
+        except (IntegrityError, InvalidOperation, ValidationError) as exc:
+            # The save runs in one transaction, so a failure here means
+            # nothing was saved. Say so plainly instead of a 500 page.
+            messages.error(
+                request,
+                f"The import could not be saved ({exc}). No customers "
+                "were added. Fix the file and try again.")
+            return redirect("customers:import_upload")
         errored = sum(1 for row in rows if row.get("error"))
         return render(request, "customers/import_result.html", {
             "saved": saved, "errored": errored,
@@ -282,8 +282,8 @@ class CustomerLedgerPdfView(PermissionRequiredMixin, View):
         from customers.exports import ledger_pdf_response
 
         customer = get_object_or_404(Customer, pk=pk)
-        date_from = _parse_date(request.GET.get("from"))
-        date_to = _parse_date(request.GET.get("to"))
+        date_from = parse_date(request.GET.get("from"))
+        date_to = parse_date(request.GET.get("to"))
         rows = customer_ledger_entries(customer, date_from, date_to)
         return ledger_pdf_response(customer, rows, date_from, date_to)
 
@@ -295,7 +295,7 @@ class CustomerLedgerExcelView(PermissionRequiredMixin, View):
         from customers.exports import ledger_excel_response
 
         customer = get_object_or_404(Customer, pk=pk)
-        date_from = _parse_date(request.GET.get("from"))
-        date_to = _parse_date(request.GET.get("to"))
+        date_from = parse_date(request.GET.get("from"))
+        date_to = parse_date(request.GET.get("to"))
         rows = customer_ledger_entries(customer, date_from, date_to)
         return ledger_excel_response(customer, rows, date_from, date_to)

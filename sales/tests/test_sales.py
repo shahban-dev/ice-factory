@@ -12,9 +12,12 @@ from core.services import ConcurrentEditError
 from core.tests.helpers import (
     make_admin, make_customer, make_payment, make_product, make_sale,
 )
+from django.urls import reverse
+from sales.forms import SaleForm
 from sales.models import Payment, Sale
 from sales.services import (
-    allocate_customer, create_sale, delete_sale, update_sale,
+    allocate_customer, create_payment, create_sale, delete_sale,
+    update_payment, update_sale,
 )
 
 
@@ -141,9 +144,14 @@ class AllocationTests(TestCase):
             {"product": self.p1, "quantity": 3, "unit_price": Decimal("500")},
         ])
         a = allocate_customer(self.customer)
-        self.assertEqual(a["opening_allocated"], Decimal("1000"))
+        # A7: a sale's own linked payments stay with that sale first.
+        # s1's Rs 2,000 paid-now covers s1 (not the opening balance),
+        # so the opening balance is still fully outstanding.
+        self.assertEqual(a["opening_allocated"], Decimal("0"))
+        self.assertEqual(a["opening_remaining"], Decimal("1000"))
         self.assertEqual(a["sales"][0]["status"], "partial")
-        self.assertEqual(a["sales"][0]["allocated"], Decimal("1000"))
+        self.assertEqual(a["sales"][0]["allocated"], Decimal("2000"))
+        self.assertEqual(a["sales"][0]["remaining"], Decimal("3000"))
         self.assertEqual(a["sales"][1]["status"], "unpaid")
         self.assertEqual(a["balance"], Decimal("1000") + Decimal("6500") - Decimal("2000"))
 
@@ -226,3 +234,118 @@ class AllocationTests(TestCase):
             [{"product": self.p1, "quantity": 2, "unit_price": Decimal("500")}],
             "", "wrong customer", version)
         self.assertEqual(Payment.objects.get(sale=sale).customer_id, other.pk)
+
+
+class PaymentGuardTests(TestCase):
+    """A2/A3: no orphan payments, no customer drift, walk-in amounts
+    locked, and sale dates move their linked payments."""
+
+    def setUp(self):
+        self.admin = make_admin()
+        self.p1 = make_product()
+        self.customer = make_customer()
+        self.other = make_customer(name="Other Shop", phone="0300-2222222")
+
+    def test_create_payment_without_customer_rejected(self):
+        with self.assertRaises(ValidationError):
+            create_payment(
+                self.admin, None, date(2026, 10, 10), Decimal("500"), "cash")
+        self.assertEqual(Payment.objects.count(), 0)
+
+    def test_payment_form_without_customer_is_error_not_500(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("sales:payment_create"), {
+            "customer": "", "date": "2026-10-10", "amount": "500",
+            "method": "cash", "reference": "",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Payment.objects.count(), 0)
+        self.assertIn("customer", response.context["form"].errors)
+
+    def test_walkin_payment_amount_locked(self):
+        walkin = make_sale(self.admin, date(2026, 10, 10), None, [
+            {"product": self.p1, "quantity": 2, "unit_price": Decimal("500")},
+        ], paid_now="1000")
+        payment = Payment.objects.get(sale=walkin)
+        with self.assertRaises(ValidationError):
+            update_payment(
+                Payment.objects.get(pk=payment.pk), self.admin,
+                date(2026, 10, 10), Decimal("100"), "cash", "",
+                "trying to change it", payment.version)
+        self.assertEqual(
+            Payment.objects.get(pk=payment.pk).amount, Decimal("1000"))
+
+    def test_credit_sale_linked_payment_amount_editable(self):
+        sale = make_sale(self.admin, date(2026, 10, 10), self.customer, [
+            {"product": self.p1, "quantity": 2, "unit_price": Decimal("500")},
+        ], paid_now="200")
+        payment = Payment.objects.get(sale=sale)
+        updated = update_payment(
+            Payment.objects.get(pk=payment.pk), self.admin,
+            date(2026, 10, 10), Decimal("500"), "cash", "",
+            "corrected amount", payment.version)
+        self.assertEqual(updated.amount, Decimal("500"))
+
+    def test_payment_customer_cannot_change_via_edit_view(self):
+        sale = make_sale(self.admin, date(2026, 10, 10), self.customer, [
+            {"product": self.p1, "quantity": 2, "unit_price": Decimal("500")},
+        ], paid_now="200")
+        payment = Payment.objects.get(sale=sale)
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("sales:payment_edit", args=[payment.pk]), {
+                "customer": self.other.pk, "date": "2026-10-10",
+                "amount": "200", "method": "cash", "reference": "",
+                "reason": "trying to move it", "version": payment.version,
+            })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            Payment.objects.get(pk=payment.pk).customer_id,
+            self.customer.pk)
+
+    def test_sale_date_edit_moves_linked_payments(self):
+        sale = make_sale(self.admin, date(2026, 10, 10), self.customer, [
+            {"product": self.p1, "quantity": 2, "unit_price": Decimal("500")},
+        ], paid_now="200")
+        version = Sale.objects.get(pk=sale.pk).version
+        update_sale(
+            Sale.objects.get(pk=sale.pk), self.admin, date(2026, 10, 12),
+            self.customer, Decimal("0"),
+            [{"product": self.p1, "quantity": 2, "unit_price": Decimal("500")}],
+            "", "date was wrong", version)
+        self.assertEqual(
+            Payment.objects.get(sale=sale).date, date(2026, 10, 12))
+
+
+class MoneyPrecisionTests(TestCase):
+    """A8: more than 2 decimals is a form/service error, never a 500."""
+
+    def setUp(self):
+        self.admin = make_admin()
+        self.p1 = make_product()
+        self.customer = make_customer()
+
+    def test_paid_now_precision_rejected(self):
+        with self.assertRaises(ValidationError):
+            make_sale(self.admin, date(2026, 10, 10), self.customer, [
+                {"product": self.p1, "quantity": 2,
+                 "unit_price": Decimal("500")},
+            ], paid_now="0.001")
+        self.assertEqual(Sale.objects.count(), 0)
+        form = SaleForm(data={
+            "date": "2026-10-10", "customer": self.customer.pk,
+            "discount": "0", "notes": "", "paid_now": "0.001",
+            "paid_method": "cash",
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn("paid_now", form.errors)
+
+    def test_unit_price_precision_rejected_by_formset(self):
+        from sales.forms import SaleItemFormSet
+        formset = SaleItemFormSet(data={
+            "items-TOTAL_FORMS": "1", "items-INITIAL_FORMS": "0",
+            "items-MIN_NUM_FORMS": "0", "items-MAX_NUM_FORMS": "1000",
+            "items-0-product": self.p1.pk, "items-0-quantity": "2",
+            "items-0-unit_price": "0.005", "items-0-id": "",
+        }, instance=Sale())
+        self.assertFalse(formset.is_valid())

@@ -16,6 +16,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 from core.models import get_settings
 from core.money import format_rs
+from core.pdf_text import para_text
 from employees.models import Payroll
 
 
@@ -36,12 +37,15 @@ def payslip_pdf_response(payroll):
         if payroll.paid_date else "Not paid yet"
     )
     story = [
-        Paragraph(f"<b>{factory.factory_name}</b>", styles["Title"]),
-        Paragraph(f"{factory.address}<br/>{factory.phone}", styles["Normal"]),
+        Paragraph(f"<b>{para_text(factory.factory_name)}</b>", styles["Title"]),
+        Paragraph(
+            f"{para_text(factory.address)}<br/>{para_text(factory.phone)}",
+            styles["Normal"],
+        ),
         Spacer(1, 5 * mm),
         Paragraph("<b>PAYSLIP</b>", styles["Heading1"]),
         Paragraph(
-            f"Employee: {employee.name}<br/>"
+            f"Employee: {para_text(employee.name)}<br/>"
             f"CNIC: {employee.masked_cnic}<br/>"
             f"Role: {employee.get_role_display()}<br/>"
             f"Month: {month_name} {payroll.year}",
@@ -69,7 +73,8 @@ def payslip_pdf_response(payroll):
     if payroll.deduction_note:
         story.append(Spacer(1, 4 * mm))
         story.append(Paragraph(
-            f"Deduction note: {payroll.deduction_note}", styles["Normal"]))
+            f"Deduction note: {para_text(payroll.deduction_note)}",
+            styles["Normal"]))
     story.append(Spacer(1, 6 * mm))
     story.append(Paragraph(
         f"Printed on {timezone.localtime(timezone.now()).strftime('%d-%m-%Y %H:%M')}",
