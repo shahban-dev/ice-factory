@@ -71,6 +71,7 @@
         {% endif %}
       </div>
       {{ item_form.id }}
+      {% if item_form.id.errors %}<div class="text-danger">{{ item_form.id.errors }}</div>{% endif %}
     </div>
     {% endfor %}
   </div>

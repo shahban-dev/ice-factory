@@ -454,6 +454,71 @@ documentation.
   allowed, because phone testing on the local Wi-Fi needs a LAN
   address in ALLOWED_HOSTS).
 
+## Group C verification (2026-10-22; 178 tests, all passing on SQLite and PostgreSQL 16)
+
+Hand-calculated scenarios, each its own test, in
+reports/tests/test_group_c.py (C1–C11) and
+sales/tests/test_group_c_concurrency.py (C12):
+
+- C1 discount everywhere: a Rs 5,000 sale with Rs 500 discount reads
+  4,500 in the monthly report, the sales register, the customer
+  balance, the ledger allocation, the dashboard month figure and
+  total outstanding.
+- C2 delete/restore: a Rs 5,000 credit sale (Rs 2,000 paid) plus a
+  Rs 1,000 walk-in sale read 6,000 / 3,000 / 3,000 (billed /
+  collected / outstanding); deleting both reads 0 / 0 / 0;
+  restoring both returns to 6,000 / 3,000 / 3,000.
+- C3 reconciliation property test: 200 seeded random actions (sales,
+  payments, sale deletes, payment deletes, walk-ins, discounts)
+  keep dashboard outstanding, the sum of positive customer
+  balances, every ledger allocation, monthly billed vs the register
+  sum, and monthly collected vs the payment sum in agreement,
+  checked after 100 and after 200 actions.
+- C4 no-customer payment: the service raises ValidationError and
+  the standalone payment form refuses to save (0 payments).
+- C5 payment-edit rules: a payment's customer can never change
+  (form field disabled and the service takes no customer argument);
+  a walk-in payment's amount is locked in the service and the form
+  (edit the sale instead); a credit-sale linked payment can change
+  amount with a reason, and the allocation follows.
+- C6 leaver payroll: Rs 30,000 salary, left 10 Oct 2026,
+  deactivated before payroll → October row with 10 days and base
+  Rs 9,677.42; November proration is None and November generation
+  is refused as a future month, so no November row exists.
+- C7 loans end to end: Rs 10,000 loan, Rs 2,000 instalment,
+  Rs 30,000 salary → October deduction 2,000, net 28,000, remaining
+  8,000 after marking paid, Salaries expense 30,000 (not 28,000);
+  reopening returns remaining to 10,000 and removes the expense.
+- C8 import bad rows: NaN, Infinity, a balance above
+  Rs 9,999,999,999.99, more than 2 decimals, a 201-character name
+  and a 1001-character address are all flagged in the preview and
+  the confirm saves only the one good row.
+- C9 allocation: Rs 10,000 opening + a Rs 5,000 sale paid in full →
+  invoice "paid", balance 10,000; a Rs 4,000 general payment →
+  6,000; a further Rs 10,000 payment → balance −4,000, credit 4,000.
+- C10 query-string fuzz: every list, report and audit page (25
+  no-argument pages, 10 pages with an object) survives a kitchen
+  sink of bad parameters plus each bad parameter alone — never a
+  500; a nonexistent object id returns 404.
+- C11 money precision: ROUND_HALF_UP cases (2.675 → 2.68,
+  0.125 → 0.13), 3 × 333.33 − 0.01 = 999.98 exactly, a full month
+  equals the salary, and 1 day of a 30-day month on Rs 10,000 is
+  333.33.
+- C12 concurrency: 25 simultaneous sales get 25 distinct invoice
+  numbers on both databases, and two admins editing the same sale
+  at once — the second gets the friendly stale-version message and
+  their edit does not land.
+- C12 FIX (found by the scenario, not by the existing tests): the
+  second admin's edit used to fail silently. Saving a sale deletes
+  and recreates its items with new ids, so the second admin's form
+  failed formset validation on the hidden item id — an error the
+  template never rendered — and the version check never ran.
+  SaleUpdateView now checks the version before the formset can
+  block it (the locked check inside update_sale still guards the
+  save), and the sale form now renders hidden item-id errors.
+  The existing stale-version test only tried a made-up version
+  (999), which is why this slipped through.
+
 ## Process (from the brief)
 
 - Questions-first reply, then wait — **Done** (Phase 0).

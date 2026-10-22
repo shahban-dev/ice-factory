@@ -18,6 +18,7 @@ from core.params import parse_int
 from core.models import get_settings
 from core.services import (
     ConcurrentEditError,
+    check_version,
     claim_form_token,
     finish_form_token,
 )
@@ -277,31 +278,45 @@ class SaleUpdateView(PermissionRequiredMixin, View):
         sale = get_object_or_404(Sale, pk=pk)
         form = SaleForm(request.POST, instance=sale, require_reason=True)
         formset = SaleItemFormSet(request.POST, instance=sale)
-        if form.is_valid() and formset.is_valid():
+        if form.is_valid():
             try:
-                updated, warning = update_sale(
-                    sale=sale,
-                    user=request.user,
-                    date=form.cleaned_data["date"],
-                    customer=form.cleaned_data["customer"],
-                    discount=form.cleaned_data["discount"] or 0,
-                    items_data=_formset_items_data(formset),
-                    notes=form.cleaned_data["notes"],
-                    reason=form.cleaned_data["reason"],
-                    form_version=form.cleaned_data.get("version"),
-                )
-            except (ValidationError, ConcurrentEditError) as exc:
-                form.add_error(None, str(exc) if isinstance(exc, ConcurrentEditError) else exc)
+                # Check the version BEFORE the formset: saving a sale
+                # replaces its items with new rows, so a second admin's
+                # form always carries dead item ids and would fail
+                # formset validation first — hiding the stale-version
+                # message behind an error the template never renders.
+                # The locked check inside update_sale still guards the
+                # actual save; this early check only surfaces the
+                # friendly message.
+                check_version(sale, form.cleaned_data.get("version"))
+            except ConcurrentEditError as exc:
+                form.add_error(None, str(exc))
             else:
-                if warning:
-                    messages.warning(
-                        request,
-                        "Warning: this edit makes the customer's balance "
-                        "negative (advance credit).")
-                messages.success(request, f"Sale {updated.invoice_number} updated.")
-                if request.POST.get("action") == "save_and_print":
-                    return redirect(f"{reverse('sales:invoice', args=[updated.pk])}?autoprint=1")
-                return redirect("sales:sale_detail", pk=updated.pk)
+                if formset.is_valid():
+                    try:
+                        updated, warning = update_sale(
+                            sale=sale,
+                            user=request.user,
+                            date=form.cleaned_data["date"],
+                            customer=form.cleaned_data["customer"],
+                            discount=form.cleaned_data["discount"] or 0,
+                            items_data=_formset_items_data(formset),
+                            notes=form.cleaned_data["notes"],
+                            reason=form.cleaned_data["reason"],
+                            form_version=form.cleaned_data.get("version"),
+                        )
+                    except (ValidationError, ConcurrentEditError) as exc:
+                        form.add_error(None, str(exc) if isinstance(exc, ConcurrentEditError) else exc)
+                    else:
+                        if warning:
+                            messages.warning(
+                                request,
+                                "Warning: this edit makes the customer's balance "
+                                "negative (advance credit).")
+                        messages.success(request, f"Sale {updated.invoice_number} updated.")
+                        if request.POST.get("action") == "save_and_print":
+                            return redirect(f"{reverse('sales:invoice', args=[updated.pk])}?autoprint=1")
+                        return redirect("sales:sale_detail", pk=updated.pk)
         context = _sale_form_context(
             form, formset, preselected_customer=_preselected_customer(request, form))
         context["title"] = f"Edit {sale.invoice_number}"
