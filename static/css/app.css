@@ -1,0 +1,122 @@
+/* Ice Factory — app styles. Mobile-first, large tap targets. */
+
+:root {
+  --brand: #0f766e;
+  --brand-dark: #115e59;
+  --ink: #0f172a;
+}
+
+body {
+  background: #f1f5f9;
+  color: var(--ink);
+}
+
+.bg-brand {
+  background-color: var(--brand) !important;
+}
+
+.btn-brand {
+  --bs-btn-bg: var(--brand);
+  --bs-btn-border-color: var(--brand);
+  --bs-btn-hover-bg: var(--brand-dark);
+  --bs-btn-hover-border-color: var(--brand-dark);
+  --bs-btn-color: #fff;
+  --bs-btn-hover-color: #fff;
+}
+
+/* 44px+ tap targets on buttons, inputs and nav links. */
+.btn, .form-control, .form-select, .nav-link, .page-link {
+  min-height: 44px;
+}
+/* iOS Safari auto-zooms on inputs smaller than 16px; never go below it. */
+.form-control, .form-select {
+  font-size: 16px;
+}
+/* Notched phones: keep the footer and toasts clear of the home indicator. */
+footer {
+  padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
+}
+.toast-container {
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom)) !important;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.navbar-toggler {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.card {
+  border: none;
+  border-radius: 1rem;
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.08);
+}
+
+.hero-card {
+  background: linear-gradient(135deg, #0f766e 0%, #0e7490 100%);
+  color: #fff;
+  border-radius: 1rem;
+}
+
+.login-card {
+  overflow: hidden;
+}
+.login-header {
+  background: linear-gradient(135deg, #0f766e 0%, #0e7490 100%);
+}
+
+.money {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.text-money-in { color: #16a34a; }
+.text-money-out { color: #dc2626; }
+
+/* Print: hide navigation and buttons, keep the document clean. */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+  .card {
+    box-shadow: none;
+    border: 1px solid #ddd;
+  }
+}
+
+/* Tables become cards on small screens. Add data-label="Column name" to
+   each <td> in tables using the .table-cards class. */
+@media (max-width: 767px) {
+  table.table-cards thead {
+    display: none;
+  }
+  table.table-cards, table.table-cards tbody,
+  table.table-cards tr, table.table-cards td {
+    display: block;
+    width: 100%;
+  }
+  table.table-cards tr {
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    margin-bottom: 0.75rem;
+    background: #fff;
+    padding: 0.5rem 0.75rem;
+  }
+  table.table-cards td {
+    border: none;
+    padding: 0.25rem 0;
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  table.table-cards td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: #64748b;
+  }
+}

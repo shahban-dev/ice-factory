@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% load core_tags %}
+{% block title %}Payments{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <h1 class="h4 mb-0">Payments</h1>
+  <a class="btn btn-brand" href="{% url 'sales:payment_create' %}">Record payment</a>
+</div>
+
+<form method="get" class="card p-3 mb-3">
+  <div class="row g-2">
+    <div class="col-9">
+      <select class="form-select" name="customer">
+        <option value="">All customers</option>
+        {% for customer in customers %}
+        <option value="{{ customer.pk }}" {% if selected_customer == customer.pk|stringformat:"s" %}selected{% endif %}>{{ customer.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-3">
+      <button class="btn btn-brand w-100" type="submit">Filter</button>
+    </div>
+  </div>
+</form>
+
+<div class="table-responsive">
+  <table class="table table-cards align-middle">
+    <thead>
+      <tr><th>Date</th><th>Customer</th><th>Sale</th><th>Method</th><th>Amount</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for payment in payments %}
+      <tr>
+        <td data-label="Date">{{ payment.date|date:"d-m-Y" }}</td>
+        <td data-label="Customer">{% if payment.customer %}<a href="{% url 'customers:detail' payment.customer.pk %}">{{ payment.customer.name }}</a>{% else %}Walk-in{% endif %}</td>
+        <td data-label="Sale">{% if payment.sale %}<a href="{% url 'sales:sale_detail' payment.sale.pk %}">{{ payment.sale.invoice_number }}</a>{% else %}—{% endif %}</td>
+        <td data-label="Method">{{ payment.get_method_display }}</td>
+        <td data-label="Amount" class="money">{{ payment.amount|rs }}</td>
+        <td>
+          <a class="btn btn-sm btn-outline-secondary" href="{% url 'sales:payment_edit' payment.pk %}">Edit</a>
+          <a class="btn btn-sm btn-outline-danger" href="{% url 'sales:payment_delete' payment.pk %}">Delete</a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="text-muted">No payments yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

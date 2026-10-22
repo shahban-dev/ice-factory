@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% load core_tags %}
+{% block title %}Payroll — {{ payroll.employee.name }}{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <h1 class="h4 mb-0">{{ payroll.employee.name }} — {{ month_name }} {{ payroll.year }}</h1>
+  <div class="d-flex gap-2 flex-wrap">
+    <a class="btn btn-outline-secondary" href="{% url 'employees:payslip_pdf' payroll.pk %}">Payslip PDF</a>
+    {% if payroll.status == "draft" %}
+    <a class="btn btn-outline-secondary" href="{% url 'employees:payroll_edit' payroll.pk %}">Edit</a>
+    <a class="btn btn-brand" href="{% url 'employees:payroll_pay' payroll.pk %}">Mark paid</a>
+    {% else %}
+    <a class="btn btn-outline-secondary" href="{% url 'employees:payroll_reopen' payroll.pk %}">Reopen</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card p-3 p-md-4">
+  <p class="mb-1"><strong>Employee:</strong> <a href="{% url 'employees:detail' payroll.employee.pk %}">{{ payroll.employee.name }}</a></p>
+  <p class="mb-1"><strong>Month:</strong> {{ month_name }} {{ payroll.year }}</p>
+  <p class="mb-1"><strong>Days employed:</strong> {{ payroll.days_employed }}</p>
+  <p class="mb-1"><strong>Base salary:</strong> <span class="money">{{ payroll.base_salary|rs }}</span></p>
+  <p class="mb-1"><strong>Bonus:</strong> <span class="money">{{ payroll.bonus|rs }}</span></p>
+  <p class="mb-1"><strong>Deductions:</strong> <span class="money">{{ payroll.deductions|rs }}</span></p>
+  {% if payroll.deduction_note %}<p class="mb-1"><strong>Deduction note:</strong> {{ payroll.deduction_note }}</p>{% endif %}
+  <p class="mb-1"><strong>Net salary:</strong> <span class="money">{{ payroll.net_salary|rs }}</span></p>
+  <p class="mb-1"><strong>Status:</strong>
+    {% if payroll.status == "paid" %}<span class="badge text-bg-success">Paid</span>
+    {% else %}<span class="badge text-bg-warning">Draft</span>{% endif %}
+  </p>
+  <p class="mb-0"><strong>Paid date:</strong> {{ payroll.paid_date|date:"d-m-Y"|default:"—" }}</p>
+  {% if payroll.linked_expense %}
+  <p class="mb-0"><strong>Linked expense:</strong> {{ payroll.linked_expense.date|date:"d-m-Y" }} — {{ payroll.linked_expense.amount|rs }}</p>
+  {% endif %}
+</div>
+{% endblock %}

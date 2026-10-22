@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% load core_tags %}
+{% block title %}Import preview{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Import preview</h1>
+<p class="text-muted">{{ savable }} row(s) ready to save, {{ errored }} row(s) with errors (they will be skipped). Nothing is saved until you confirm.</p>
+<div class="table-responsive">
+  <table class="table table-cards align-middle">
+    <thead>
+      <tr><th>Row</th><th>Name</th><th>Phone</th><th>Opening balance</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr class="{% if row.error %}table-danger{% endif %}">
+        <td data-label="Row">{{ row.row_no }}</td>
+        <td data-label="Name">{{ row.name|default:"—" }}</td>
+        <td data-label="Phone">{{ row.phone|default:"—" }}</td>
+        <td data-label="Opening balance" class="money">{{ row.opening_balance|rs }}</td>
+        <td data-label="Status">
+          {% if row.error %}<span class="text-danger">{{ row.error }}</span>
+          {% else %}Ready{% endif %}
+          {% for warning in row.warnings %}<br><span class="text-warning">{{ warning }}</span>{% endfor %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<form method="post" class="d-flex gap-2">
+  {% csrf_token %}
+  <button class="btn btn-brand" type="submit">Confirm and save {{ savable }} customer(s)</button>
+  <a class="btn btn-outline-secondary" href="{% url 'customers:import_upload' %}">Upload a different file</a>
+</form>
+{% endblock %}

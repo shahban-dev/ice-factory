@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% load core_tags %}
+{% block title %}{{ sale.invoice_number }}{% endblock %}
+{% block content %}
+{% if sale.is_deleted %}
+<div class="alert alert-danger"><strong>CANCELLED</strong> — this sale was deleted. It is shown for the record only.</div>
+{% endif %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <h1 class="h4 mb-0">{{ sale.invoice_number }}</h1>
+  <div class="d-flex gap-2 flex-wrap">
+    <a class="btn btn-outline-secondary" href="{% url 'sales:invoice' sale.pk %}">Invoice</a>
+    <a class="btn btn-outline-secondary" href="{% url 'sales:invoice_pdf' sale.pk %}">Invoice PDF</a>
+    {% if not sale.is_deleted %}
+    <a class="btn btn-outline-secondary" href="{% url 'sales:sale_edit' sale.pk %}">Edit</a>
+    <a class="btn btn-outline-danger" href="{% url 'sales:sale_delete' sale.pk %}">Delete</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card p-3 p-md-4 mb-3">
+  <p class="mb-1"><strong>Date:</strong> {{ sale.date|date:"d-m-Y" }}</p>
+  <p class="mb-1"><strong>Customer:</strong>
+    {% if sale.customer %}<a href="{% url 'customers:detail' sale.customer.pk %}">{{ sale.customer.name }}</a>
+    {% else %}Walk-in / Cash{% endif %}
+  </p>
+  {% if status %}
+  <p class="mb-1"><strong>Status:</strong>
+    {% if status == "paid" %}<span class="badge text-bg-success">Paid</span>
+    {% elif status == "partial" %}<span class="badge text-bg-warning">Partial</span>
+    {% else %}<span class="badge text-bg-danger">Unpaid</span>{% endif %}
+  </p>
+  {% endif %}
+  {% if sale.notes %}<p class="mb-0"><strong>Notes:</strong> {{ sale.notes }}</p>{% endif %}
+</div>
+
+<div class="table-responsive">
+  <table class="table table-cards align-middle">
+    <thead>
+      <tr><th>Product</th><th>Qty</th><th>Unit price</th><th>Line total</th></tr>
+    </thead>
+    <tbody>
+      {% for item in sale.items.all %}
+      <tr>
+        <td data-label="Product">{{ item.product.name }}</td>
+        <td data-label="Qty">{{ item.quantity }}</td>
+        <td data-label="Unit price" class="money">{{ item.unit_price|rs }}</td>
+        <td data-label="Line total" class="money">{{ item.line_total|rs }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card p-3 mb-3">
+  <div class="d-flex justify-content-between"><span>Subtotal</span><strong class="money">{{ sale.subtotal|rs }}</strong></div>
+  <div class="d-flex justify-content-between"><span>Discount</span><strong class="money">{{ sale.discount|rs }}</strong></div>
+  <div class="d-flex justify-content-between"><span>Total</span><strong class="money">{{ sale.total|rs }}</strong></div>
+  <div class="d-flex justify-content-between"><span>Received with this sale</span><strong class="money">{{ sale.paid_with_sale|rs }}</strong></div>
+  {% if remaining is not None %}
+  <div class="d-flex justify-content-between"><span>Remaining on this invoice</span><strong class="money">{{ remaining|rs }}</strong></div>
+  {% endif %}
+  {% if allocation %}
+  <div class="d-flex justify-content-between"><span>Customer's total outstanding</span><strong class="money">{{ allocation.balance|balance }}</strong></div>
+  {% endif %}
+</div>
+
+{% if sale.payments.all %}
+<h2 class="h6">Payments on this sale</h2>
+<ul class="list-group">
+  {% for payment in sale.payments.all %}
+  <li class="list-group-item d-flex justify-content-between">
+    <span>{{ payment.date|date:"d-m-Y" }} — {{ payment.get_method_display }}{% if payment.reference %} ({{ payment.reference }}){% endif %}</span>
+    <strong class="money">{{ payment.amount|rs }}</strong>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% load core_tags %}
+{% block title %}Payroll{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <h1 class="h4 mb-0">Payroll</h1>
+  <a class="btn btn-brand" href="{% url 'employees:payroll_generate' %}">Generate payroll</a>
+</div>
+
+<form method="get" class="card p-3 mb-3">
+  <div class="row g-2">
+    <div class="col-6 col-md-3">
+      <input class="form-control" type="number" name="year" placeholder="Year" value="{{ year }}">
+    </div>
+    <div class="col-6 col-md-3">
+      <select class="form-select" name="month">
+        <option value="">All months</option>
+        {% for num, name in months %}
+        <option value="{{ num }}" {% if month == num|stringformat:"s" %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 col-md-4">
+      <select class="form-select" name="employee">
+        <option value="">All employees</option>
+        {% for employee in employees %}
+        <option value="{{ employee.pk }}" {% if selected_employee == employee.pk|stringformat:"s" %}selected{% endif %}>{{ employee.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 col-md-2">
+      <button class="btn btn-brand w-100" type="submit">Filter</button>
+    </div>
+  </div>
+</form>
+
+<div class="table-responsive">
+  <table class="table table-cards align-middle">
+    <thead>
+      <tr><th>Employee</th><th>Month</th><th>Base</th><th>Net</th><th>Status</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for row in payrolls %}
+      <tr>
+        <td data-label="Employee"><a href="{% url 'employees:detail' row.employee.pk %}">{{ row.employee.name }}</a></td>
+        <td data-label="Month">{{ row.month|stringformat:"02d" }}/{{ row.year }}</td>
+        <td data-label="Base" class="money">{{ row.base_salary|rs }}</td>
+        <td data-label="Net" class="money">{{ row.net_salary|rs }}</td>
+        <td data-label="Status">
+          {% if row.status == "paid" %}<span class="badge text-bg-success">Paid</span>
+          {% else %}<span class="badge text-bg-warning">Draft</span>{% endif %}
+        </td>
+        <td><a class="btn btn-sm btn-outline-secondary" href="{% url 'employees:payroll_detail' row.pk %}">Details</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="text-muted">No payroll rows yet. Generate a month to start.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

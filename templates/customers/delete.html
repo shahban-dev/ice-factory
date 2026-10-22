@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Delete {{ customer.name }}{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Delete {{ customer.name }}?</h1>
+{% if block_reason %}
+<div class="alert alert-warning">{{ block_reason }}</div>
+<form method="post" class="d-inline">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="deactivate">
+  <button class="btn btn-brand" type="submit">Deactivate instead</button>
+</form>
+<a class="btn btn-outline-secondary" href="{% url 'customers:detail' customer.pk %}">Back</a>
+{% else %}
+<p class="text-muted">This customer has no sales, no payments and a zero balance, so they can be deleted. The record goes to the recycle bin and can be restored.</p>
+<form method="post" class="card p-3">
+  {% csrf_token %}
+  <div class="mb-3">
+    <label class="form-label" for="id_reason">Reason (optional)</label>
+    <input class="form-control" type="text" id="id_reason" name="reason">
+  </div>
+  <button class="btn btn-danger" type="submit">Delete</button>
+  <a class="btn btn-outline-secondary" href="{% url 'customers:detail' customer.pk %}">Cancel</a>
+</form>
+{% endif %}
+{% endblock %}

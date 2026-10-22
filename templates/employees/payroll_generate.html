@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Generate payroll{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Generate payroll</h1>
+<p class="text-muted">Creates draft rows for every eligible employee for the month. Employees who already have a row that month are skipped, and so are employees who were not employed that month. Review and edit the drafts, then mark each paid.</p>
+<form method="post" class="card p-3 p-md-4">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+  {% endif %}
+  <div class="row g-3">
+    <div class="col-6">
+      {{ form.year.label_tag }}
+      {{ form.year }}
+      {% if form.year.errors %}<div class="text-danger">{{ form.year.errors }}</div>{% endif %}
+    </div>
+    <div class="col-6">
+      {{ form.month.label_tag }}
+      {{ form.month }}
+      {% if form.month.errors %}<div class="text-danger">{{ form.month.errors }}</div>{% endif %}
+    </div>
+  </div>
+  <button class="btn btn-brand mt-3" type="submit">Generate drafts</button>
+  <a class="btn btn-outline-secondary mt-3" href="{% url 'employees:payroll_list' %}">Cancel</a>
+</form>
+{% endblock %}

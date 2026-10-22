@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% load core_tags %}
+{% block title %}Delete payment{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Delete this payment?</h1>
+<p class="text-muted">
+  {{ payment.date|date:"d-m-Y" }} —
+  {% if payment.customer %}{{ payment.customer.name }}{% else %}Walk-in{% endif %} —
+  {{ payment.amount|rs }}. The record goes to the recycle bin and can be restored.
+</p>
+<form method="post" class="card p-3">
+  {% csrf_token %}
+  <div class="mb-3">
+    <label class="form-label" for="id_reason">Reason (optional)</label>
+    <input class="form-control" type="text" id="id_reason" name="reason">
+  </div>
+  <button class="btn btn-danger" type="submit">Delete</button>
+  <a class="btn btn-outline-secondary" href="{% url 'sales:payment_list' %}">Cancel</a>
+</form>
+{% endblock %}

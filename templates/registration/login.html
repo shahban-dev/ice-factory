@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Log in &middot; {{ factory.factory_name|default:"Ice Factory" }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-sm-8 col-md-6 col-lg-4">
+    <div class="card login-card mt-4">
+      <div class="card-header login-header text-white text-center py-4">
+        <div class="fs-1">&#10052;</div>
+        <h1 class="h4 mb-0">{{ factory.factory_name|default:"Ice Factory" }}</h1>
+        <p class="mb-0 opacity-75">Internal management system</p>
+      </div>
+      <div class="card-body p-4">
+        {% if form.errors %}
+          <div class="alert alert-danger" role="alert">
+            Username or password is incorrect. Please try again.
+          </div>
+        {% endif %}
+        <form method="post">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label class="form-label" for="id_username">Username</label>
+            <input type="text" name="username" id="id_username" class="form-control" required autofocus autocomplete="username">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="id_password">Password</label>
+            <input type="password" name="password" id="id_password" class="form-control" required autocomplete="current-password">
+          </div>
+          <button type="submit" class="btn btn-brand w-100">Log in</button>
+        </form>
+      </div>
+    </div>
+    <p class="text-center text-muted small mt-3">For office use only. Keep your password private.</p>
+  </div>
+</div>
+{% endblock %}

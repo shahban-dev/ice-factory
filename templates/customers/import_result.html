@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}Import complete{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Import complete</h1>
+<p>{{ saved }} customer(s) saved. {{ errored }} row(s) had errors and were skipped.</p>
+<a class="btn btn-brand" href="{% url 'customers:list' %}">Go to customers</a>
+{% endblock %}

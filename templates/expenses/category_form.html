@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">{{ title }}</h1>
+<form method="post" class="card p-3 p-md-4">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+  {% endif %}
+  {% for field in form %}
+  <div class="mb-3">
+    {{ field.label_tag }}
+    {{ field }}
+    {% if field.errors %}<div class="text-danger">{{ field.errors }}</div>{% endif %}
+  </div>
+  {% endfor %}
+  {% if category %}
+  <div class="mb-3">
+    <label class="form-label" for="id_reason">Reason for change (optional)</label>
+    <input class="form-control" type="text" id="id_reason" name="reason">
+  </div>
+  {% endif %}
+  <div>
+    <button class="btn btn-brand" type="submit">Save</button>
+    <a class="btn btn-outline-secondary" href="{% url 'expenses:category_list' %}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

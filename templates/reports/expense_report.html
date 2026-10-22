@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% load core_tags %}
+{% block title %}Expense report{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Expense report</h1>
+<form method="get" class="card p-3 mb-3">
+  <div class="row g-2">
+    <div class="col-6 col-md-3">
+      <input class="form-control" type="date" name="from" value="{{ date_from|date:'Y-m-d' }}">
+    </div>
+    <div class="col-6 col-md-3">
+      <input class="form-control" type="date" name="to" value="{{ date_to|date:'Y-m-d' }}">
+    </div>
+    <div class="col-12 col-md-4">
+      <select class="form-select" name="category">
+        <option value="">All categories</option>
+        {% for category in categories %}
+        <option value="{{ category.pk }}" {% if selected_category == category.pk|stringformat:"s" %}selected{% endif %}>{{ category.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 col-md-2">
+      <button class="btn btn-brand w-100" type="submit">Filter</button>
+    </div>
+    <div class="col-12">
+      <a class="btn btn-outline-secondary" href="?from={{ date_from|date:'Y-m-d' }}&to={{ date_to|date:'Y-m-d' }}&category={{ selected_category }}&format=pdf">PDF</a>
+      <a class="btn btn-outline-secondary" href="?from={{ date_from|date:'Y-m-d' }}&to={{ date_to|date:'Y-m-d' }}&category={{ selected_category }}&format=excel">Excel</a>
+    </div>
+  </div>
+</form>
+<div class="table-responsive">
+  <table class="table table-cards align-middle">
+    <thead>
+      <tr><th>Date</th><th>Category</th><th>Description</th><th>Method</th><th>Amount</th></tr>
+    </thead>
+    <tbody>
+      {% for expense in data.expenses %}
+      <tr>
+        <td data-label="Date">{{ expense.date|date:"d-m-Y" }}</td>
+        <td data-label="Category">{{ expense.category.name }}</td>
+        <td data-label="Description">{{ expense.description|default:"—" }}</td>
+        <td data-label="Method">{{ expense.get_method_display }}</td>
+        <td data-label="Amount" class="money text-money-out">{{ expense.amount|rs }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" class="text-muted">No expenses in this range.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="card p-3 mt-3">
+  <h2 class="h6">Totals by category</h2>
+  {% for row in data.by_category %}
+  <div class="d-flex justify-content-between"><span>{{ row.category__name }}</span><strong class="money">{{ row.total|rs }}</strong></div>
+  {% endfor %}
+  <div class="d-flex justify-content-between mt-2"><span><strong>Grand total</strong></span><strong class="money">{{ data.grand|rs }}</strong></div>
+</div>
+{% endblock %}

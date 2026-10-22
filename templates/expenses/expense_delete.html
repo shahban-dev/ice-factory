@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% load core_tags %}
+{% block title %}Delete expense{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Delete this expense?</h1>
+{% if blocked %}
+<div class="alert alert-warning">
+  This expense was created by payroll and cannot be deleted here. Reopen the
+  payroll row first; that removes this expense.
+</div>
+<a class="btn btn-outline-secondary" href="{% url 'expenses:expense_list' %}">Back to expenses</a>
+{% else %}
+<p class="text-muted">{{ expense.date|date:"d-m-Y" }} — {{ expense.category.name }} — {{ expense.amount|rs }}. The record goes to the recycle bin and can be restored.</p>
+<form method="post" class="card p-3">
+  {% csrf_token %}
+  <div class="mb-3">
+    <label class="form-label" for="id_reason">Reason (optional)</label>
+    <input class="form-control" type="text" id="id_reason" name="reason">
+  </div>
+  <button class="btn btn-danger" type="submit">Delete</button>
+  <a class="btn btn-outline-secondary" href="{% url 'expenses:expense_list' %}">Cancel</a>
+</form>
+{% endif %}
+{% endblock %}

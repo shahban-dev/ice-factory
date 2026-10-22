@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% load core_tags %}
+{% block title %}Reopen payroll — {{ payroll.employee.name }}{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Reopen payroll — {{ payroll.employee.name }} ({{ month_name }} {{ payroll.year }})</h1>
+<p class="text-muted">
+  This returns the row to draft and soft-deletes its linked Salaries expense
+  ({{ payroll.net_salary|rs }}). You can then edit the row and mark it paid again.
+</p>
+<form method="post" class="card p-3">
+  {% csrf_token %}
+  <button class="btn btn-brand" type="submit">Reopen as draft</button>
+  <a class="btn btn-outline-secondary" href="{% url 'employees:payroll_detail' payroll.pk %}">Cancel</a>
+</form>
+{% endblock %}

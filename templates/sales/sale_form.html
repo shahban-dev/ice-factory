@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">{{ title }}</h1>
+<form method="post" class="card p-3 p-md-4" id="sale-form">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+  {% endif %}
+  {% if formset.non_form_errors %}
+  <div class="alert alert-danger">{{ formset.non_form_errors }}</div>
+  {% endif %}
+  {{ form.version }}
+
+  <div class="mb-3">
+    <label class="form-label" for="customer-search">Customer</label>
+    <input type="text" id="customer-search" class="form-control" placeholder="Type a name or phone…"
+      hx-get="{% url 'customers:search_fragment' %}" hx-trigger="keyup changed delay:300ms" hx-target="#customer-results"
+      value="{% if preselected_customer %}{{ preselected_customer.name }}{% endif %}">
+    <div id="customer-results"></div>
+    <div id="customer-selected" class="form-text">
+      {% if preselected_customer %}Selected: {{ preselected_customer.name }}
+      {% else %}Walk-in (no customer) — a walk-in sale must be fully paid.{% endif %}
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-secondary mt-1" id="walkin-btn">Walk-in sale</button>
+    {{ form.customer }}
+    {% if form.customer.errors %}<div class="text-danger">{{ form.customer.errors }}</div>{% endif %}
+  </div>
+
+  <div class="row g-3">
+    <div class="col-12 col-md-6">
+      <div class="mb-3">
+        {{ form.date.label_tag }}
+        {{ form.date }}
+        {% if form.date.errors %}<div class="text-danger">{{ form.date.errors }}</div>{% endif %}
+      </div>
+    </div>
+    <div class="col-12 col-md-6">
+      <div class="mb-3">
+        {{ form.discount.label_tag }}
+        {{ form.discount }}
+        {% if form.discount.errors %}<div class="text-danger">{{ form.discount.errors }}</div>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {{ formset.management_form }}
+  <h2 class="h6 mt-2">Items</h2>
+  <div id="item-rows">
+    {% for item_form in formset %}
+    <div class="item-row border rounded p-3 mb-2">
+      <div class="row g-2">
+        <div class="col-12">
+          {{ item_form.product.label_tag }} {{ item_form.product }}
+          {% if item_form.product.errors %}<div class="text-danger">{{ item_form.product.errors }}</div>{% endif %}
+        </div>
+        <div class="col-6">
+          {{ item_form.quantity.label_tag }} {{ item_form.quantity }}
+          {% if item_form.quantity.errors %}<div class="text-danger">{{ item_form.quantity.errors }}</div>{% endif %}
+        </div>
+        <div class="col-6">
+          {{ item_form.unit_price.label_tag }} {{ item_form.unit_price }}
+          {% if item_form.unit_price.errors %}<div class="text-danger">{{ item_form.unit_price.errors }}</div>{% endif %}
+        </div>
+        {% if item_form.instance.pk %}
+        <div class="col-12">
+          <label class="form-check-label">{{ item_form.DELETE }} Remove this item</label>
+        </div>
+        {% endif %}
+      </div>
+      {{ item_form.id }}
+    </div>
+    {% endfor %}
+  </div>
+  <div id="empty-row" class="d-none">
+    <div class="item-row border rounded p-3 mb-2">
+      <div class="row g-2">
+        <div class="col-12">
+          {{ formset.empty_form.product.label_tag }} {{ formset.empty_form.product }}
+        </div>
+        <div class="col-6">
+          {{ formset.empty_form.quantity.label_tag }} {{ formset.empty_form.quantity }}
+        </div>
+        <div class="col-6">
+          {{ formset.empty_form.unit_price.label_tag }} {{ formset.empty_form.unit_price }}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="mb-3">
+    <button type="button" class="btn btn-outline-secondary" id="add-row">+ Add item</button>
+  </div>
+
+  <div class="card p-3 mb-3 bg-light">
+    <div class="d-flex justify-content-between"><span>Subtotal</span><strong id="display-subtotal" class="money">Rs 0</strong></div>
+    <div class="d-flex justify-content-between"><span>Total</span><strong id="display-total" class="money">Rs 0</strong></div>
+    <div class="form-text">Totals are calculated on the server when you save; this is only a preview.</div>
+  </div>
+
+  <div class="mb-3">
+    {{ form.paid_now.label_tag }}
+    {{ form.paid_now }}
+    {% if form.paid_now.errors %}<div class="text-danger">{{ form.paid_now.errors }}</div>{% endif %}
+    <div class="btn-group mt-2" role="group" aria-label="Payment shortcuts">
+      <button type="button" class="btn btn-outline-secondary" id="paid-full">Paid in full</button>
+      <button type="button" class="btn btn-outline-secondary" id="paid-nothing">Paid nothing</button>
+      <button type="button" class="btn btn-outline-secondary" id="paid-custom">Custom amount</button>
+    </div>
+  </div>
+  <div class="mb-3">
+    {{ form.paid_method.label_tag }}
+    {{ form.paid_method }}
+  </div>
+  <div class="mb-3">
+    {{ form.notes.label_tag }}
+    {{ form.notes }}
+  </div>
+  {% if form.reason %}
+  <div class="mb-3">
+    {{ form.reason.label_tag }}
+    {{ form.reason }}
+    {% if form.reason.errors %}<div class="text-danger">{{ form.reason.errors }}</div>{% endif %}
+  </div>
+  {% endif %}
+
+  <div class="d-flex gap-2 flex-wrap">
+    <button class="btn btn-brand" type="submit" name="action" value="save">Save</button>
+    <button class="btn btn-outline-secondary" type="submit" name="action" value="save_and_print">Save and print</button>
+    {% if not sale %}
+    <button class="btn btn-outline-secondary" type="submit" name="action" value="save_and_new">Save and new</button>
+    {% endif %}
+    <a class="btn btn-outline-secondary" href="{% if sale %}{% url 'sales:sale_detail' sale.pk %}{% else %}{% url 'sales:sale_list' %}{% endif %}">Cancel</a>
+  </div>
+</form>
+
+{{ product_prices|json_script:"product-prices" }}
+<script>
+(function () {
+  const PRICES = JSON.parse(document.getElementById("product-prices").textContent);
+  const PREFIX = "{{ formset.prefix }}";
+  const money = (n) => "Rs " + n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+
+  function computeTotals() {
+    let subtotal = 0;
+    document.querySelectorAll("#item-rows .item-row").forEach((row) => {
+      const del = row.querySelector('[name$="-DELETE"]');
+      if (del && del.checked) return;
+      const qty = parseFloat(row.querySelector('[name$="-quantity"]').value) || 0;
+      const price = parseFloat(row.querySelector('[name$="-unit_price"]').value) || 0;
+      subtotal += qty * price;
+    });
+    const discount = parseFloat(document.getElementById("id_discount").value) || 0;
+    const total = Math.max(0, subtotal - discount);
+    document.getElementById("display-subtotal").textContent = money(subtotal);
+    document.getElementById("display-total").textContent = money(total);
+    return total;
+  }
+
+  document.getElementById("sale-form").addEventListener("input", computeTotals);
+
+  // Prefill the default price when a product is picked (still editable).
+  document.body.addEventListener("change", (e) => {
+    if (e.target.matches('[name$="-product"]')) {
+      const row = e.target.closest(".item-row");
+      const priceInput = row.querySelector('[name$="-unit_price"]');
+      const pid = e.target.value;
+      if (pid && PRICES[pid] !== undefined) priceInput.value = PRICES[pid];
+      computeTotals();
+    }
+  });
+
+  // Add a new item row.
+  document.getElementById("add-row").addEventListener("click", () => {
+    const totalForms = document.getElementById("id_" + PREFIX + "-TOTAL_FORMS");
+    const idx = parseInt(totalForms.value, 10);
+    const html = document.getElementById("empty-row").innerHTML.replace(/__prefix__/g, idx);
+    const wrap = document.createElement("div");
+    wrap.innerHTML = html;
+    document.getElementById("item-rows").appendChild(wrap.firstElementChild);
+    totalForms.value = idx + 1;
+  });
+
+  // Paid shortcuts.
+  document.getElementById("paid-full").addEventListener("click", () => {
+    document.getElementById("id_paid_now").value = computeTotals();
+  });
+  document.getElementById("paid-nothing").addEventListener("click", () => {
+    document.getElementById("id_paid_now").value = 0;
+  });
+  document.getElementById("paid-custom").addEventListener("click", () => {
+    document.getElementById("id_paid_now").focus();
+  });
+
+  // Customer picker: pick from HTMX results, or walk-in.
+  document.body.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-customer-id]");
+    if (!btn) return;
+    document.getElementById("id_customer").value = btn.dataset.customerId;
+    document.getElementById("customer-search").value = btn.dataset.customerName;
+    document.getElementById("customer-selected").textContent = "Selected: " + btn.dataset.customerName;
+    document.getElementById("customer-results").innerHTML = "";
+  });
+  document.getElementById("walkin-btn").addEventListener("click", () => {
+    document.getElementById("id_customer").value = "";
+    document.getElementById("customer-search").value = "";
+    document.getElementById("customer-selected").textContent = "Walk-in (no customer) — must be fully paid.";
+    document.getElementById("customer-results").innerHTML = "";
+  });
+
+  computeTotals();
+})();
+</script>
+{% endblock %}

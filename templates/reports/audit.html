@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Audit log{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Audit log</h1>
+<form method="get" class="card p-3 mb-3">
+  <div class="row g-2">
+    <div class="col-6 col-md-3">
+      <select class="form-select" name="user">
+        <option value="">All users</option>
+        {% for user in users %}
+        <option value="{{ user.pk }}" {% if selected_user == user.pk|stringformat:"s" %}selected{% endif %}>{{ user.username }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-6 col-md-3">
+      <select class="form-select" name="model">
+        <option value="">All records</option>
+        {% for label in models %}
+        <option value="{{ label }}" {% if selected_model == label %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-6 col-md-3">
+      <input class="form-control" type="date" name="from" value="{{ date_from }}">
+    </div>
+    <div class="col-6 col-md-3">
+      <input class="form-control" type="date" name="to" value="{{ date_to }}">
+    </div>
+    <div class="col-9">
+      <input class="form-control" type="search" name="object" placeholder="Search by record name…" value="{{ object_text }}">
+    </div>
+    <div class="col-3">
+      <button class="btn btn-brand w-100" type="submit">Filter</button>
+    </div>
+  </div>
+</form>
+
+<div class="table-responsive">
+  <table class="table table-cards align-middle">
+    <thead>
+      <tr><th>When</th><th>Who</th><th>Record</th><th>What</th><th>Reason</th><th>Changes</th></tr>
+    </thead>
+    <tbody>
+      {% for entry in page %}
+      <tr>
+        <td data-label="When">{{ entry.date|date:"d-m-Y H:i" }}</td>
+        <td data-label="Who">{{ entry.user.username|default:"—" }}</td>
+        <td data-label="Record">{{ entry.model }} — {{ entry.object }}</td>
+        <td data-label="What">{{ entry.type }}</td>
+        <td data-label="Reason">{{ entry.reason|default:"—" }}</td>
+        <td data-label="Changes">
+          {% for change in entry.changes %}<div>{{ change }}</div>{% empty %}—{% endfor %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="text-muted">No audit records match these filters.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if page.has_other_pages %}
+<nav aria-label="Pages">
+  <ul class="pagination">
+    {% if page.has_previous %}
+    <li class="page-item"><a class="page-link" href="?user={{ selected_user }}&model={{ selected_model }}&from={{ date_from }}&to={{ date_to }}&object={{ object_text }}&page={{ page.previous_page_number }}">Previous</a></li>
+    {% endif %}
+    <li class="page-item disabled"><span class="page-link">Page {{ page.number }} of {{ page.paginator.num_pages }}</span></li>
+    {% if page.has_next %}
+    <li class="page-item"><a class="page-link" href="?user={{ selected_user }}&model={{ selected_model }}&from={{ date_from }}&to={{ date_to }}&object={{ object_text }}&page={{ page.next_page_number }}">Next</a></li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
+{% endblock %}

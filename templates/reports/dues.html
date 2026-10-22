@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% load core_tags %}
+{% block title %}Customer dues report{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Customer dues report</h1>
+<div class="d-flex gap-2 flex-wrap mb-3">
+  <a class="btn btn-outline-secondary" href="?format=pdf">Download PDF</a>
+  <a class="btn btn-outline-secondary" href="?format=excel">Download Excel</a>
+</div>
+<div class="table-responsive">
+  <table class="table table-cards align-middle">
+    <thead>
+      <tr><th>Customer</th><th>Balance</th><th>Oldest unpaid invoice</th><th>Last payment</th></tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td data-label="Customer"><a href="{% url 'customers:detail' row.customer.pk %}">{{ row.customer.name }}</a></td>
+        <td data-label="Balance" class="money text-money-out">{{ row.balance|rs }}</td>
+        <td data-label="Oldest unpaid invoice">{{ row.oldest_unpaid|date:"d-m-Y"|default:"—" }}</td>
+        <td data-label="Last payment">{{ row.last_payment|date:"d-m-Y"|default:"—" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4" class="text-muted">Nobody owes anything right now.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

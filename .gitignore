@@ -1,0 +1,23 @@
+# Secrets and local state — never commit these.
+.env
+db.sqlite3
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Django
+staticfiles/
+logs/
+media/
+backups/
+seed_demo_expected_totals.txt
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store

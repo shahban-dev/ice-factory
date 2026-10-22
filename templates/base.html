@@ -1,0 +1,94 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{% block title %}{{ factory.factory_name|default:"Ice Factory" }}{% endblock %}</title>
+  <link rel="manifest" href="{% static 'manifest.webmanifest' %}">
+  <meta name="theme-color" content="#0f766e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Ice Factory">
+  <link rel="apple-touch-icon" href="{% static 'icons/apple-touch-icon.png' %}">
+  <link rel="icon" type="image/png" sizes="192x192" href="{% static 'icons/icon-192.png' %}">
+  <link rel="stylesheet" href="{% static 'vendor/bootstrap.min.css' %}">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  <script src="{% static 'vendor/htmx.min.js' %}" defer></script>
+  {% block extra_head %}{% endblock %}
+</head>
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+<nav class="navbar navbar-expand-lg navbar-dark bg-brand sticky-top no-print">
+  <div class="container-fluid">
+    <a class="navbar-brand fw-bold" href="{% url 'home' %}">&#10052; {{ factory.factory_name|default:"Ice Factory" }}</a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav"
+            aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+        <li class="nav-item"><a class="nav-link" href="{% url 'home' %}">Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'customers:list' %}">Customers</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'sales:sale_list' %}">Sales</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'sales:product_list' %}">Products</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'sales:payment_list' %}">Payments</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'expenses:expense_list' %}">Expenses</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'employees:list' %}">Employees</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'employees:payroll_list' %}">Payroll</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'reports:index' %}">Reports</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'reports:settings' %}">Settings</a></li>
+        {% if user.is_superuser %}
+        <li class="nav-item"><a class="nav-link" href="{% url 'admin:index'}">Admin</a></li>
+        {% endif %}
+      </ul>
+      <form class="d-flex my-2 my-lg-0 me-lg-2" method="get" action="{% url 'search' %}" role="search">
+        <input class="form-control" type="search" name="q" placeholder="Search customers, invoices…" aria-label="Search" value="{{ request.GET.q|default:'' }}">
+        <button class="btn btn-outline-light ms-2" type="submit">Search</button>
+      </form>
+      <ul class="navbar-nav ms-auto">
+        {% if user.is_authenticated %}
+        <li class="nav-item"><span class="nav-link">Signed in as <strong>{{ user.username }}</strong></span></li>
+        <li class="nav-item">
+          <form method="post" action="{% url 'logout' %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-light btn-sm mt-1">Log out</button>
+          </form>
+        </li>
+        {% else %}
+        <li class="nav-item"><a class="nav-link" href="{% url 'login' %}">Log in</a></li>
+        {% endif %}
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<main class="container py-4">
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="container pb-4 text-center text-muted small no-print">
+  {{ factory.factory_name|default:"Ice Factory" }} &middot; Internal management system
+</footer>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3 no-print">
+  <div id="errorToast" class="toast align-items-center text-bg-danger border-0" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="d-flex">
+      <div class="toast-body" id="errorToastBody">Something went wrong.</div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+    </div>
+  </div>
+</div>
+
+<script src="{% static 'vendor/bootstrap.bundle.min.js' %}"></script>
+<script src="{% static 'js/app.js' %}"></script>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

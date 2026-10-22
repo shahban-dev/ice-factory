@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% load core_tags %}
+{% block title %}Customers{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <h1 class="h4 mb-0">Customers</h1>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="{% url 'customers:import_upload' %}">Import</a>
+    <a class="btn btn-brand" href="{% url 'customers:create' %}">Add customer</a>
+  </div>
+</div>
+
+<form method="get" class="card p-3 mb-3">
+  <div class="row g-2">
+    <div class="col-12 col-md-6">
+      <input class="form-control" type="search" name="q" placeholder="Search name or phone…" value="{{ q }}">
+    </div>
+    <div class="col-12 col-md-4">
+      <select class="form-select" name="status">
+        <option value="" {% if not status %}selected{% endif %}>All customers</option>
+        <option value="active" {% if status == "active" %}selected{% endif %}>Active</option>
+        <option value="inactive" {% if status == "inactive" %}selected{% endif %}>Inactive</option>
+        <option value="dues" {% if status == "dues" %}selected{% endif %}>With dues</option>
+      </select>
+    </div>
+    <div class="col-12 col-md-2">
+      <button class="btn btn-brand w-100" type="submit">Filter</button>
+    </div>
+  </div>
+</form>
+
+<div class="table-responsive">
+  <table class="table table-cards align-middle">
+    <thead>
+      <tr><th>Name</th><th>Phone</th><th>Balance</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for customer in customers %}
+      <tr>
+        <td data-label="Name"><a href="{% url 'customers:detail' customer.pk %}">{{ customer.name }}</a>{% if not customer.is_active %} <span class="badge text-bg-secondary">Inactive</span>{% endif %}</td>
+        <td data-label="Phone">{{ customer.phone|default:"—" }}</td>
+        <td data-label="Balance" class="money {% if customer.balance > 0 %}text-money-out{% endif %}">{{ customer.balance|balance }}</td>
+        <td><a class="btn btn-sm btn-outline-secondary" href="{% url 'customers:detail' customer.pk %}">Ledger</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4" class="text-muted">No customers found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if is_paginated %}
+<nav aria-label="Pages">
+  <ul class="pagination">
+    {% if page_obj.has_previous %}
+    <li class="page-item"><a class="page-link" href="?q={{ q }}&status={{ status }}&page={{ page_obj.previous_page_number }}">Previous</a></li>
+    {% endif %}
+    <li class="page-item disabled"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>
+    {% if page_obj.has_next %}
+    <li class="page-item"><a class="page-link" href="?q={{ q }}&status={{ status }}&page={{ page_obj.next_page_number }}">Next</a></li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
+{% endblock %}

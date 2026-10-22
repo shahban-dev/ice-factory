@@ -1,0 +1,11 @@
+{% load core_tags %}
+<ul class="list-group list-group-flush">
+  {% for item in activity %}
+  <li class="list-group-item d-flex justify-content-between">
+    <span><span class="badge text-bg-secondary">{{ item.kind }}</span> <a href="{{ item.url }}">{{ item.text }}</a></span>
+    <strong class="money {% if item.amount < 0 %}text-money-out{% else %}text-money-in{% endif %}">{{ item.amount|rs }}</strong>
+  </li>
+  {% empty %}
+  <li class="list-group-item text-muted">Nothing recorded today yet.</li>
+  {% endfor %}
+</ul>

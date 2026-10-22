@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% load core_tags %}
+{% block title %}{{ employee.name }}{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <h1 class="h4 mb-0">{{ employee.name }}{% if not employee.is_active %} <span class="badge text-bg-secondary">Inactive</span>{% endif %}</h1>
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary" href="{% url 'employees:edit' employee.pk %}">Edit</a>
+    <a class="btn btn-outline-danger" href="{% url 'employees:delete' employee.pk %}">Delete</a>
+  </div>
+</div>
+
+<div class="card p-3 p-md-4 mb-4">
+  <p class="mb-1"><strong>Role:</strong> {{ employee.get_role_display }}</p>
+  <p class="mb-1"><strong>Phone:</strong> {{ employee.phone|default:"—" }}</p>
+  <p class="mb-1"><strong>CNIC:</strong> {{ employee.cnic|default:"—" }}</p>
+  <p class="mb-1"><strong>Joined:</strong> {{ employee.joining_date|date:"d-m-Y" }}</p>
+  <p class="mb-1"><strong>Left:</strong> {{ employee.leaving_date|date:"d-m-Y"|default:"—" }}</p>
+  <p class="mb-1"><strong>Monthly salary:</strong> <span class="money">{{ employee.monthly_salary|rs }}</span></p>
+  {% if employee.notes %}<p class="mb-0"><strong>Notes:</strong> {{ employee.notes }}</p>{% endif %}
+</div>
+
+<h2 class="h5">Payroll history</h2>
+<div class="table-responsive">
+  <table class="table table-cards align-middle">
+    <thead>
+      <tr><th>Month</th><th>Base</th><th>Bonus</th><th>Deductions</th><th>Net</th><th>Status</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for row in payrolls %}
+      <tr>
+        <td data-label="Month">{{ row.month|stringformat:"02d" }}/{{ row.year }}</td>
+        <td data-label="Base" class="money">{{ row.base_salary|rs }}</td>
+        <td data-label="Bonus" class="money">{{ row.bonus|rs }}</td>
+        <td data-label="Deductions" class="money">{{ row.deductions|rs }}</td>
+        <td data-label="Net" class="money">{{ row.net_salary|rs }}</td>
+        <td data-label="Status">
+          {% if row.status == "paid" %}<span class="badge text-bg-success">Paid</span>
+          {% else %}<span class="badge text-bg-warning">Draft</span>{% endif %}
+        </td>
+        <td><a class="btn btn-sm btn-outline-secondary" href="{% url 'employees:payroll_detail' row.pk %}">Details</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7" class="text-muted">No payroll rows yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

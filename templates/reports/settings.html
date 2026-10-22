@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Factory settings</h1>
+<form method="post" class="card p-3 p-md-4 mb-4">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+  {% endif %}
+  {% for field in form %}
+  <div class="mb-3">
+    {{ field.label_tag }}
+    {{ field }}
+    {% if field.errors %}<div class="text-danger">{{ field.errors }}</div>{% endif %}
+  </div>
+  {% endfor %}
+  <button class="btn btn-brand" type="submit">Save settings</button>
+</form>
+
+<div class="card p-3 p-md-4">
+  <h2 class="h5">Backups</h2>
+  {% if last_backup %}
+  <p class="mb-3">Last successful backup: <strong>{{ last_backup.created_at|date:"d-m-Y H:i" }}</strong> ({{ last_backup.filename }})</p>
+  {% else %}
+  <p class="mb-3 text-muted">No successful backup yet. Scheduled backups run daily at 02:00.</p>
+  {% endif %}
+  <p class="text-muted">Download a fresh backup now. You will be asked for your login password again, and the download is logged.</p>
+  <form method="post" action="{% url 'reports:backup_download' %}">
+    {% csrf_token %}
+    <div class="mb-3">
+      {{ backup_form.password.label_tag }}
+      {{ backup_form.password }}
+      {% if backup_form.password.errors %}<div class="text-danger">{{ backup_form.password.errors }}</div>{% endif %}
+    </div>
+    <button class="btn btn-outline-secondary" type="submit">Download backup</button>
+  </form>
+</div>
+{% endblock %}

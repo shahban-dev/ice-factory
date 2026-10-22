@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% load static core_tags %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Dashboard — {{ today|date:"d-m-Y" }}</h1>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card p-3">
+      <div class="text-muted">Today's billed</div>
+      <strong class="money text-money-in">{{ today_billed|rs }}</strong>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card p-3">
+      <div class="text-muted">Today's collected</div>
+      <strong class="money text-money-in">{{ today_collected|rs }}</strong>
+    </div>
+  </div>
+  <div class="col-12 col-md-6">
+    <div class="card p-3">
+      <div class="text-muted">Total outstanding dues</div>
+      <strong class="money text-money-out">{{ total_outstanding|rs }}</strong>
+    </div>
+  </div>
+</div>
+
+<div class="card p-3 p-md-4 mb-4">
+  <h2 class="h5">This month</h2>
+  <div class="row g-3">
+    <div class="col-6 col-md-4">
+      <div class="text-muted">Billed</div>
+      <strong class="money text-money-in">{{ month.billed|rs }}</strong>
+    </div>
+    <div class="col-6 col-md-4">
+      <div class="text-muted">Collected</div>
+      <strong class="money text-money-in">{{ month.collected|rs }}</strong>
+    </div>
+    <div class="col-6 col-md-4">
+      <div class="text-muted">Expenses</div>
+      <strong class="money text-money-out">{{ month.expenses|rs }}</strong>
+    </div>
+    <div class="col-6 col-md-6">
+      <div class="text-muted">Sales profit (billed − expenses)</div>
+      <strong class="money">{{ month.sales_profit|rs }}</strong>
+    </div>
+    <div class="col-6 col-md-6">
+      <div class="text-muted">Cash profit (collected − expenses)</div>
+      <strong class="money">{{ month.cash_profit|rs }}</strong>
+    </div>
+  </div>
+</div>
+
+<div class="card p-3 p-md-4 mb-4">
+  <h2 class="h5">Last 6 months</h2>
+  <canvas id="month-chart" height="220"></canvas>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-12 col-md-6">
+    <div class="card p-3">
+      <h2 class="h5">Top 5 debtors</h2>
+      <ul class="list-group list-group-flush">
+        {% for customer in top_debtors %}
+        <li class="list-group-item d-flex justify-content-between">
+          <a href="{% url 'customers:detail' customer.pk %}">{{ customer.name }}</a>
+          <strong class="money text-money-out">{{ customer.balance|rs }}</strong>
+        </li>
+        {% empty %}
+        <li class="list-group-item text-muted">Nobody owes anything right now.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  <div class="col-12 col-md-6">
+    <div class="card p-3">
+      <h2 class="h5">Quick add</h2>
+      <div class="d-flex gap-2 flex-wrap">
+        <a class="btn btn-brand" href="{% url 'sales:sale_create' %}">New sale</a>
+        <a class="btn btn-outline-secondary" href="{% url 'sales:payment_create' %}">Record payment</a>
+        <a class="btn btn-outline-secondary" href="{% url 'expenses:expense_create' %}">Add expense</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card p-3">
+  <h2 class="h5">Today's activity <span class="text-muted small">(refreshes every 30 seconds)</span></h2>
+  <div hx-get="{% url 'dashboard_activity' %}" hx-trigger="every 30s" hx-swap="innerHTML">
+    {% include "core/_activity.html" %}
+  </div>
+</div>
+
+{{ chart_months|json_script:"chart-months" }}
+{{ chart_billed|json_script:"chart-billed" }}
+{{ chart_collected|json_script:"chart-collected" }}
+{{ chart_expenses|json_script:"chart-expenses" }}
+<script src="{% static 'js/chart.umd.js' %}"></script>
+<script>
+(function () {
+  const labels = JSON.parse(document.getElementById("chart-months").textContent);
+  const billed = JSON.parse(document.getElementById("chart-billed").textContent).map(Number);
+  const collected = JSON.parse(document.getElementById("chart-collected").textContent).map(Number);
+  const expenses = JSON.parse(document.getElementById("chart-expenses").textContent).map(Number);
+  new Chart(document.getElementById("month-chart"), {
+    type: "bar",
+    data: {
+      labels: labels,
+      datasets: [
+        { label: "Billed", data: billed, backgroundColor: "#0f766e" },
+        { label: "Collected", data: collected, backgroundColor: "#22c55e" },
+        { label: "Expenses", data: expenses, backgroundColor: "#dc2626" },
+      ],
+    },
+    options: { responsive: true, maintainAspectRatio: false },
+  });
+})();
+</script>
+{% endblock %}

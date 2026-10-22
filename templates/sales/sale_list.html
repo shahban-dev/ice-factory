@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% load core_tags %}
+{% block title %}Sales{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <h1 class="h4 mb-0">Sales</h1>
+  <a class="btn btn-brand" href="{% url 'sales:sale_create' %}">New sale</a>
+</div>
+
+<form method="get" class="card p-3 mb-3">
+  <div class="row g-2">
+    <div class="col-12 col-md-5">
+      <input class="form-control" type="search" name="q" placeholder="Invoice number or customer…" value="{{ q }}">
+    </div>
+    <div class="col-12 col-md-5">
+      <select class="form-select" name="customer">
+        <option value="">All customers</option>
+        {% for customer in customers %}
+        <option value="{{ customer.pk }}" {% if selected_customer == customer.pk|stringformat:"s" %}selected{% endif %}>{{ customer.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-12 col-md-2">
+      <button class="btn btn-brand w-100" type="submit">Filter</button>
+    </div>
+  </div>
+</form>
+
+<div class="table-responsive">
+  <table class="table table-cards align-middle">
+    <thead>
+      <tr><th>Invoice</th><th>Date</th><th>Customer</th><th>Total</th><th>Received</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for sale in sales %}
+      <tr>
+        <td data-label="Invoice"><a href="{% url 'sales:sale_detail' sale.pk %}">{{ sale.invoice_number }}</a></td>
+        <td data-label="Date">{{ sale.date|date:"d-m-Y" }}</td>
+        <td data-label="Customer">{% if sale.customer %}<a href="{% url 'customers:detail' sale.customer.pk %}">{{ sale.customer.name }}</a>{% else %}Walk-in{% endif %}</td>
+        <td data-label="Total" class="money">{{ sale.total_annotated|rs }}</td>
+        <td data-label="Received" class="money">{{ sale.received|rs }}</td>
+        <td><a class="btn btn-sm btn-outline-secondary" href="{% url 'sales:invoice' sale.pk %}">Invoice</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="text-muted">No sales yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if is_paginated %}
+<nav aria-label="Pages">
+  <ul class="pagination">
+    {% if page_obj.has_previous %}
+    <li class="page-item"><a class="page-link" href="?q={{ q }}&customer={{ selected_customer }}&page={{ page_obj.previous_page_number }}">Previous</a></li>
+    {% endif %}
+    <li class="page-item disabled"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>
+    {% if page_obj.has_next %}
+    <li class="page-item"><a class="page-link" href="?q={{ q }}&customer={{ selected_customer }}&page={{ page_obj.next_page_number }}">Next</a></li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
+{% endblock %}

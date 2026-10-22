@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% load core_tags %}
+{% block title %}Monthly report{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Monthly report — {{ data.month_name }} {{ data.year }}</h1>
+
+<form method="get" class="card p-3 mb-3">
+  <div class="row g-2">
+    <div class="col-5">
+      <input class="form-control" type="number" name="year" value="{{ year }}">
+    </div>
+    <div class="col-5">
+      <select class="form-select" name="month">
+        {% for num, name in months %}
+        <option value="{{ num }}" {% if month == num %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-2">
+      <button class="btn btn-brand w-100" type="submit">View</button>
+    </div>
+  </div>
+</form>
+
+<div class="d-flex gap-2 flex-wrap mb-3">
+  <a class="btn btn-outline-secondary" href="?year={{ year }}&month={{ month }}&format=pdf">Download PDF</a>
+  <a class="btn btn-outline-secondary" href="?year={{ year }}&month={{ month }}&format=excel">Download Excel</a>
+</div>
+
+<div class="card p-3 p-md-4 mb-3">
+  <div class="d-flex justify-content-between"><span>Billed</span><strong class="money text-money-in">{{ data.billed|rs }}</strong></div>
+  <div class="d-flex justify-content-between"><span>Collected</span><strong class="money text-money-in">{{ data.collected|rs }}</strong></div>
+  <div class="d-flex justify-content-between"><span>Expenses</span><strong class="money text-money-out">{{ data.expenses|rs }}</strong></div>
+  <div class="d-flex justify-content-between"><span>Salaries paid</span><strong class="money text-money-out">{{ data.salaries_paid|rs }}</strong></div>
+  <div class="d-flex justify-content-between"><span>Sales profit (billed − expenses)</span><strong class="money">{{ data.sales_profit|rs }}</strong></div>
+  <div class="d-flex justify-content-between"><span>Cash profit (collected − expenses)</span><strong class="money">{{ data.cash_profit|rs }}</strong></div>
+  <div class="d-flex justify-content-between"><span>Outstanding at month end</span><strong class="money text-money-out">{{ data.outstanding_at_month_end|rs }}</strong></div>
+</div>
+
+<div class="card p-3 p-md-4 mb-3">
+  <h2 class="h5">Expenses by category</h2>
+  {% for row in data.by_category %}
+  <div class="d-flex justify-content-between"><span>{{ row.category__name }}</span><strong class="money">{{ row.total|rs }}</strong></div>
+  {% empty %}
+  <p class="text-muted">No expenses this month.</p>
+  {% endfor %}
+</div>
+
+<div class="card p-3 p-md-4 mb-3">
+  <h2 class="h5">Blocks sold per product</h2>
+  {% for row in data.blocks %}
+  <div class="d-flex justify-content-between"><span>{{ row.product__name }}</span><strong>{{ row.qty }}</strong></div>
+  {% empty %}
+  <p class="text-muted">No sales this month.</p>
+  {% endfor %}
+</div>
+
+<div class="card p-3 p-md-4 mb-3">
+  <h2 class="h5">Top 10 customers by billed</h2>
+  {% for row in data.top_customers %}
+  <div class="d-flex justify-content-between"><span>{{ row.sale__customer__name }}</span><strong class="money">{{ row.total|rs }}</strong></div>
+  {% empty %}
+  <p class="text-muted">No customer sales this month.</p>
+  {% endfor %}
+</div>
+
+<div class="card p-3">
+  <h2 class="h6">Definitions</h2>
+  <p class="text-muted mb-0">
+    Billed = sum of sale totals by sale date (opening balances NOT billed).
+    Collected = sum of payments by payment date (incl. toward opening balances).
+    Expenses = sum of expenses by expense date incl. salary payments.
+    Sales profit = Billed − Expenses. Cash profit = Collected − Expenses.
+    Customer balance = opening_balance + sale totals − payments
+    (positive = owes, negative = advance credit).
+  </p>
+</div>
+{% endblock %}

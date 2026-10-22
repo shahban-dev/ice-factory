@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% load core_tags %}
+{% block title %}Edit payroll — {{ payroll.employee.name }}{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Edit payroll — {{ payroll.employee.name }} ({{ month_name }} {{ payroll.year }})</h1>
+<p class="text-muted">Base salary is a snapshot from generation and cannot be edited. Change the bonus or deductions; the net is recomputed on save and must stay at or above zero.</p>
+<form method="post" class="card p-3 p-md-4">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+  {% endif %}
+  {{ form.version }}
+  <p><strong>Base salary:</strong> <span class="money">{{ payroll.base_salary|rs }}</span> ({{ payroll.days_employed }} days employed)</p>
+  {% for field in form %}
+  <div class="mb-3">
+    {{ field.label_tag }}
+    {{ field }}
+    {% if field.errors %}<div class="text-danger">{{ field.errors }}</div>{% endif %}
+  </div>
+  {% endfor %}
+  <div>
+    <button class="btn btn-brand" type="submit">Save</button>
+    <a class="btn btn-outline-secondary" href="{% url 'employees:payroll_detail' payroll.pk %}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

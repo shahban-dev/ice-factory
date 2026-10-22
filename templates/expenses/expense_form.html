@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">{{ title }}</h1>
+{% if read_only %}
+<div class="alert alert-info">
+  This expense was created by payroll and can only change through payroll.
+  To change it, reopen the payroll row first.
+</div>
+{% endif %}
+<form method="post" class="card p-3 p-md-4" {% if read_only %}onsubmit="return false;"{% endif %}>
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+  {% endif %}
+  {{ form.version }}
+  <fieldset {% if read_only %}disabled{% endif %}>
+  {% for field in form %}
+  <div class="mb-3">
+    {{ field.label_tag }}
+    {{ field }}
+    {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+    {% if field.errors %}<div class="text-danger">{{ field.errors }}</div>{% endif %}
+  </div>
+  {% endfor %}
+  {% if not read_only %}
+  <button class="btn btn-brand" type="submit">Save</button>
+  {% endif %}
+  </fieldset>
+  <div class="mt-2">
+    <a class="btn btn-outline-secondary" href="{% url 'expenses:expense_list' %}">Back to expenses</a>
+  </div>
+</form>
+{% endblock %}

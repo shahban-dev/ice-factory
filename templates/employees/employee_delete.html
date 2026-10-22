@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Delete {{ employee.name }}{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Delete {{ employee.name }}?</h1>
+{% if blocked %}
+<div class="alert alert-warning">This employee has payroll rows and cannot be deleted. Deactivate them instead.</div>
+<form method="post" class="d-inline">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="deactivate">
+  <button class="btn btn-brand" type="submit">Deactivate instead</button>
+</form>
+<a class="btn btn-outline-secondary" href="{% url 'employees:detail' employee.pk %}">Back</a>
+{% else %}
+<p class="text-muted">This employee has no payroll rows, so they can be deleted. The record goes to the recycle bin and can be restored.</p>
+<form method="post" class="card p-3">
+  {% csrf_token %}
+  <div class="mb-3">
+    <label class="form-label" for="id_reason">Reason (optional)</label>
+    <input class="form-control" type="text" id="id_reason" name="reason">
+  </div>
+  <button class="btn btn-danger" type="submit">Delete</button>
+  <a class="btn btn-outline-secondary" href="{% url 'employees:detail' employee.pk %}">Cancel</a>
+</form>
+{% endif %}
+{% endblock %}

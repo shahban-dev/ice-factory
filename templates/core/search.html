@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Search{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">Search results for "{{ q }}"</h1>
+{% if customers %}
+<h2 class="h5">Customers</h2>
+<div class="list-group mb-4">
+  {% for customer in customers %}
+  <a class="list-group-item list-group-item-action" href="{% url 'customers:detail' customer.pk %}">
+    {{ customer.name }}{% if customer.phone %} — {{ customer.phone }}{% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+{% if sales %}
+<h2 class="h5">Invoices</h2>
+<div class="list-group mb-4">
+  {% for sale in sales %}
+  <a class="list-group-item list-group-item-action" href="{% url 'sales:sale_detail' sale.pk %}">
+    {{ sale.invoice_number }} — {{ sale.date|date:"d-m-Y" }} — {% if sale.customer %}{{ sale.customer.name }}{% else %}Walk-in{% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+{% if not customers and not sales %}
+<p class="text-muted">Nothing found. Try a customer name, a phone number, or an invoice number.</p>
+{% endif %}
+{% endblock %}

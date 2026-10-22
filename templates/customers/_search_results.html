@@ -1,0 +1,12 @@
+{% if customers %}
+<div class="list-group mt-2">
+  {% for customer in customers %}
+  <button type="button" class="list-group-item list-group-item-action"
+          data-customer-id="{{ customer.pk }}" data-customer-name="{{ customer.name }}">
+    {{ customer.name }}{% if customer.phone %} — {{ customer.phone }}{% endif %}
+  </button>
+  {% endfor %}
+</div>
+{% elif q %}
+<div class="text-muted mt-2">No active customer matches "{{ q }}". Use Walk-in for a cash sale without a customer.</div>
+{% endif %}
