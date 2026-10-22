@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block back %}<a href="{% url 'employees:detail' employee.pk %}" class="btn btn-outline-secondary mb-3 no-print">← Back to {{ employee.name }}</a>{% endblock %}
+{% block content %}
+<h1 class="h4 mb-3">{{ title }}</h1>
+<p class="text-muted">A loan is money lent to the employee, repaid through payroll deductions. Giving the loan is not a salary expense; each paid payroll row repays it by its loan deduction.</p>
+<form method="post" class="card p-3 p-md-4">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+  {% endif %}
+  {{ form.version }}
+  {% for field in form %}
+  <div class="mb-3">
+    {{ field.label_tag }}
+    {{ field }}
+    {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+    {% if field.errors %}<div class="text-danger">{{ field.errors }}</div>{% endif %}
+  </div>
+  {% endfor %}
+  <div>
+    <button class="btn btn-brand" type="submit">Save</button>
+    <a class="btn btn-outline-secondary" href="{% url 'employees:detail' employee.pk %}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

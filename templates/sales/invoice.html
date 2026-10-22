@@ -6,6 +6,9 @@
   <button class="btn btn-brand" onclick="window.print()">Print</button>
   <a class="btn btn-outline-secondary" href="{% url 'sales:invoice_pdf' sale.pk %}">Download PDF</a>
   <a class="btn btn-outline-secondary" href="{% url 'sales:sale_detail' sale.pk %}">Back to sale</a>
+  {% if whatsapp_invoice_url %}
+  <a class="btn btn-outline-success" href="{{ whatsapp_invoice_url }}" target="_blank" rel="noopener">Share on WhatsApp</a>
+  {% endif %}
 </div>
 
 {% if sale.is_deleted %}

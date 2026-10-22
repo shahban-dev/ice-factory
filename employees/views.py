@@ -1,6 +1,7 @@
 """Employee and payroll views."""
 
 import calendar
+from decimal import Decimal
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
@@ -13,15 +14,21 @@ from core.permissions import PermissionRequiredMixin
 from core.services import ConcurrentEditError, save_form_with_version, soft_delete_objects
 from employees.forms import (
     EmployeeForm,
+    LoanForm,
     MarkPaidForm,
     PayrollEditForm,
     PayrollGenerateForm,
 )
-from employees.models import Employee, Payroll
+from employees.models import Employee, Loan, Payroll
 from employees.services import (
+    create_loan,
+    delete_loan,
     generate_payroll,
+    loan_remaining,
+    loan_repaid,
     mark_paid,
     reopen_payroll,
+    update_loan,
     update_payroll_draft,
 )
 
@@ -54,8 +61,22 @@ class EmployeeDetailView(PermissionRequiredMixin, View):
     def get(self, request, pk):
         employee = get_object_or_404(Employee, pk=pk)
         payrolls = employee.payrolls.all().order_by("-year", "-month")
+        loans = employee.loans.all().order_by("date", "id")
+        loan_rows = [
+            {
+                "loan": loan,
+                "repaid": loan_repaid(loan),
+                "remaining": loan_remaining(loan),
+            }
+            for loan in loans
+        ]
+        loans_outstanding = sum(
+            (row["remaining"] for row in loan_rows), Decimal("0")
+        )
         return render(request, "employees/employee_detail.html", {
             "employee": employee, "payrolls": payrolls,
+            "loan_rows": loan_rows,
+            "loans_outstanding": loans_outstanding,
         })
 
 
@@ -151,6 +172,106 @@ class EmployeeDeleteView(PermissionRequiredMixin, View):
         return redirect("employees:list")
 
 
+class LoanCreateView(PermissionRequiredMixin, View):
+    permission_code = "employees.create"
+
+    def get(self, request, pk):
+        employee = get_object_or_404(Employee, pk=pk)
+        return render(request, "employees/loan_form.html", {
+            "form": LoanForm(), "title": f"New loan for {employee.name}",
+            "employee": employee,
+        })
+
+    def post(self, request, pk):
+        employee = get_object_or_404(Employee, pk=pk)
+        form = LoanForm(request.POST)
+        if form.is_valid():
+            try:
+                create_loan(
+                    request.user, employee,
+                    form.cleaned_data["date"],
+                    form.cleaned_data["amount"],
+                    form.cleaned_data["monthly_installment"],
+                    form.cleaned_data["notes"],
+                )
+            except ValidationError as exc:
+                form.add_error(None, exc)
+            else:
+                messages.success(
+                    request, f"Loan of Rs {form.cleaned_data['amount']} "
+                    f"recorded for {employee.name}.")
+                return redirect("employees:detail", pk=employee.pk)
+        return render(request, "employees/loan_form.html", {
+            "form": form, "title": f"New loan for {employee.name}",
+            "employee": employee,
+        })
+
+
+class LoanUpdateView(PermissionRequiredMixin, View):
+    permission_code = "employees.edit"
+
+    def get(self, request, pk):
+        loan = get_object_or_404(Loan, pk=pk)
+        form = LoanForm(instance=loan, require_reason=True)
+        return render(request, "employees/loan_form.html", {
+            "form": form, "title": f"Edit loan for {loan.employee.name}",
+            "employee": loan.employee, "loan": loan,
+        })
+
+    def post(self, request, pk):
+        loan = get_object_or_404(Loan, pk=pk)
+        form = LoanForm(request.POST, instance=loan, require_reason=True)
+        if form.is_valid():
+            try:
+                update_loan(
+                    loan, request.user,
+                    form.cleaned_data["date"],
+                    form.cleaned_data["amount"],
+                    form.cleaned_data["monthly_installment"],
+                    form.cleaned_data["notes"],
+                    form.cleaned_data["reason"],
+                    form_version=form.cleaned_data.get("version"),
+                )
+            except (ValidationError, ConcurrentEditError) as exc:
+                form.add_error(None, str(exc) if isinstance(exc, ConcurrentEditError) else exc)
+            else:
+                messages.success(request, "Loan updated.")
+                return redirect("employees:detail", pk=loan.employee_id)
+        return render(request, "employees/loan_form.html", {
+            "form": form, "title": f"Edit loan for {loan.employee.name}",
+            "employee": loan.employee, "loan": loan,
+        })
+
+
+class LoanDeleteView(PermissionRequiredMixin, View):
+    permission_code = "employees.delete"
+
+    def get(self, request, pk):
+        loan = get_object_or_404(Loan, pk=pk)
+        return render(request, "employees/loan_delete.html", {
+            "loan": loan, "repaid": loan_repaid(loan),
+            "remaining": loan_remaining(loan),
+        })
+
+    def post(self, request, pk):
+        loan = get_object_or_404(Loan, pk=pk)
+        employee_id = loan.employee_id
+        try:
+            cleared = delete_loan(
+                loan, request.user, request.POST.get("reason", ""))
+        except ValidationError as exc:
+            messages.error(request, str(exc))
+            return redirect("employees:detail", pk=employee_id)
+        if cleared:
+            messages.success(
+                request,
+                f"Loan deleted. The loan deduction was cleared from "
+                f"{len(cleared)} draft payroll row(s).")
+        else:
+            messages.success(request, "Loan deleted.")
+        return redirect("employees:detail", pk=employee_id)
+
+
 class PayrollListView(PermissionRequiredMixin, ListView):
     permission_code = "payroll.view"
     model = Payroll
@@ -190,7 +311,7 @@ class PayrollDetailView(PermissionRequiredMixin, View):
 
     def get(self, request, pk):
         payroll = get_object_or_404(
-            Payroll.objects.select_related("employee", "linked_expense"), pk=pk
+            Payroll.objects.select_related("employee", "linked_expense", "loan"), pk=pk
         )
         return render(request, "employees/payroll_detail.html", {
             "payroll": payroll,
@@ -264,6 +385,8 @@ class PayrollUpdateView(PermissionRequiredMixin, View):
                     deduction_note=form.cleaned_data["deduction_note"],
                     reason=form.cleaned_data["reason"],
                     form_version=form.cleaned_data.get("version"),
+                    loan=form.cleaned_data.get("loan"),
+                    loan_deduction=form.cleaned_data.get("loan_deduction") or 0,
                 )
             except (ValidationError, ConcurrentEditError) as exc:
                 form.add_error(None, str(exc) if isinstance(exc, ConcurrentEditError) else exc)
@@ -285,17 +408,19 @@ class PayrollMarkPaidView(PermissionRequiredMixin, View):
             messages.error(request, "This row is already paid.")
             return redirect("employees:payroll_detail", pk=pk)
         return render(request, "employees/payroll_pay.html", {
-            "form": MarkPaidForm(), "payroll": payroll,
+            "form": MarkPaidForm(payroll=payroll), "payroll": payroll,
             "month_name": calendar.month_name[payroll.month],
         })
 
     def post(self, request, pk):
         payroll = get_object_or_404(Payroll, pk=pk)
-        form = MarkPaidForm(request.POST)
+        form = MarkPaidForm(request.POST, payroll=payroll)
         if form.is_valid():
             try:
                 mark_paid(
-                    payroll, request.user, form.cleaned_data["paid_date"]
+                    payroll, request.user, form.cleaned_data["paid_date"],
+                    paid_amount=form.cleaned_data.get("paid_amount"),
+                    paid_note=form.cleaned_data.get("paid_note", ""),
                 )
             except ValidationError as exc:
                 form.add_error(None, exc)
@@ -341,6 +466,6 @@ class PayslipPdfView(PermissionRequiredMixin, View):
         from employees.payslip import payslip_pdf_response
 
         payroll = get_object_or_404(
-            Payroll.objects.select_related("employee"), pk=pk
+            Payroll.objects.select_related("employee", "loan"), pk=pk
         )
         return payslip_pdf_response(payroll)

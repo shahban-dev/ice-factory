@@ -113,6 +113,66 @@ class Employee(BaseModel):
         return mask_cnic(self.cnic)
 
 
+class Loan(BaseModel):
+    """Money lent to an employee, repaid through payroll deductions.
+
+    A loan is a RECEIVABLE, not an expense: giving the loan costs
+    nothing on the salary line. Each month's payroll proposes a
+    deduction of min(monthly_installment, remaining, base + bonus);
+    when that payroll row is marked paid, its loan_deduction counts
+    as repaid. Reopening the row reverses the repayment. The salary
+    expense for a paid row is net + loan_deduction (base + bonus -
+    other deductions), so a repayment never reduces the salary expense.
+    """
+
+    STATUS_ACTIVE = "active"
+    STATUS_SETTLED = "settled"
+    STATUS_CHOICES = [
+        (STATUS_ACTIVE, "Active"),
+        (STATUS_SETTLED, "Settled"),
+    ]
+
+    employee = models.ForeignKey(
+        Employee, on_delete=models.PROTECT, related_name="loans"
+    )
+    date = models.DateField()
+    amount = models.DecimalField(
+        max_digits=12, decimal_places=2,
+        validators=[MinValueValidator(0)],
+    )
+    monthly_installment = models.DecimalField(
+        max_digits=12, decimal_places=2,
+        validators=[MinValueValidator(0)],
+    )
+    status = models.CharField(
+        max_length=10, choices=STATUS_CHOICES, default=STATUS_ACTIVE
+    )
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["date", "id"]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(amount__gt=0),
+                name="loan_amount_positive",
+            ),
+            models.CheckConstraint(
+                check=models.Q(monthly_installment__gt=0),
+                name="loan_installment_positive",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.employee.name} — loan Rs {self.amount}"
+
+    def clean(self):
+        super().clean()
+        if self.amount is not None and self.amount <= 0:
+            raise ValidationError("Loan amount must be more than zero.")
+        if self.monthly_installment is not None and self.monthly_installment <= 0:
+            raise ValidationError("Monthly installment must be more than zero.")
+
+
 class Payroll(BaseModel):
     STATUS_DRAFT = "draft"
     STATUS_PAID = "paid"
@@ -139,6 +199,25 @@ class Payroll(BaseModel):
         validators=[MinValueValidator(0)],
     )
     deduction_note = models.TextField(blank=True)
+    # Loan repaid through this row. Shown separately from "other
+    # deductions": net = base + bonus - deductions - loan_deduction,
+    # while the salary expense is net + loan_deduction (see Loan).
+    loan = models.ForeignKey(
+        "employees.Loan", on_delete=models.PROTECT,
+        null=True, blank=True, related_name="payroll_rows",
+    )
+    loan_deduction = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0,
+        validators=[MinValueValidator(0)],
+    )
+    # B3: the amount actually handed over when marked paid. Defaults to
+    # net_salary; an override requires a note (paid_note) and the
+    # expense becomes paid_amount + loan_deduction.
+    paid_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0)],
+    )
+    paid_note = models.TextField(blank=True)
     net_salary = models.DecimalField(max_digits=12, decimal_places=2)
     status = models.CharField(
         max_length=10, choices=STATUS_CHOICES, default=STATUS_DRAFT
@@ -173,6 +252,14 @@ class Payroll(BaseModel):
             models.CheckConstraint(
                 check=models.Q(deductions__gte=0),
                 name="payroll_deductions_non_negative",
+            ),
+            models.CheckConstraint(
+                check=models.Q(loan_deduction__gte=0),
+                name="payroll_loan_deduction_non_negative",
+            ),
+            models.CheckConstraint(
+                check=models.Q(paid_amount__gte=0) | models.Q(paid_amount__isnull=True),
+                name="payroll_paid_amount_non_negative",
             ),
             models.CheckConstraint(
                 check=models.Q(net_salary__gte=0),

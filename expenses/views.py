@@ -1,14 +1,19 @@
 """Expense and category views. Payroll-linked expenses are read-only here:
 they change only through payroll."""
 
+import uuid
+
 from django.contrib import messages
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views import View
 from django.views.generic import ListView
 
 from core.params import parse_date, parse_int
 from core.permissions import PermissionRequiredMixin
+from core.services import claim_form_token, finish_form_token
 from expenses.forms import ExpenseCategoryForm, ExpenseForm
 from expenses.models import Expense, ExpenseCategory
 from expenses.services import create_expense, delete_expense, update_expense
@@ -129,26 +134,38 @@ class ExpenseCreateView(PermissionRequiredMixin, View):
 
     def get(self, request):
         return render(request, "expenses/expense_form.html", {
-            "form": ExpenseForm(), "title": "Add expense",
+            "form": ExpenseForm(initial={"form_token": str(uuid.uuid4())}),
+            "title": "Add expense",
         })
 
     def post(self, request):
         form = ExpenseForm(request.POST)
         if form.is_valid():
             try:
-                expense = create_expense(
-                    user=request.user,
-                    date=form.cleaned_data["date"],
-                    category=form.cleaned_data["category"],
-                    amount=form.cleaned_data["amount"],
-                    description=form.cleaned_data["description"],
-                    method=form.cleaned_data["method"],
-                )
+                with transaction.atomic():
+                    record, is_new = claim_form_token(
+                        request.user, form.cleaned_data.get("form_token", ""))
+                    if not is_new and record.success_url:
+                        messages.info(
+                            request,
+                            "This expense was already added — showing the "
+                            "original instead of adding it twice.")
+                        return redirect(record.success_url)
+                    expense = create_expense(
+                        user=request.user,
+                        date=form.cleaned_data["date"],
+                        category=form.cleaned_data["category"],
+                        amount=form.cleaned_data["amount"],
+                        description=form.cleaned_data["description"],
+                        method=form.cleaned_data["method"],
+                    )
+                    url = reverse("expenses:expense_list")
+                    finish_form_token(record, url)
             except ValidationError as exc:
                 form.add_error(None, exc)
             else:
                 messages.success(request, "Expense added.")
-                return redirect("expenses:expense_list")
+                return redirect(url)
         return render(request, "expenses/expense_form.html", {
             "form": form, "title": "Add expense",
         })

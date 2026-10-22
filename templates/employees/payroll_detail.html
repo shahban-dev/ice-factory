@@ -24,12 +24,18 @@
   <p class="mb-1"><strong>Bonus:</strong> <span class="money">{{ payroll.bonus|rs }}</span></p>
   <p class="mb-1"><strong>Deductions:</strong> <span class="money">{{ payroll.deductions|rs }}</span></p>
   {% if payroll.deduction_note %}<p class="mb-1"><strong>Deduction note:</strong> {{ payroll.deduction_note }}</p>{% endif %}
+  {% if payroll.loan %}
+  <p class="mb-1"><strong>Loan deduction:</strong> <span class="money">{{ payroll.loan_deduction|rs }}</span> (loan of Rs {{ payroll.loan.amount }} from {{ payroll.loan.date|date:"d-m-Y" }})</p>
+  {% endif %}
   <p class="mb-1"><strong>Net salary:</strong> <span class="money">{{ payroll.net_salary|rs }}</span></p>
   <p class="mb-1"><strong>Status:</strong>
     {% if payroll.status == "paid" %}<span class="badge text-bg-success">Paid</span>
     {% else %}<span class="badge text-bg-warning">Draft</span>{% endif %}
   </p>
   <p class="mb-0"><strong>Paid date:</strong> {{ payroll.paid_date|date:"d-m-Y"|default:"—" }}</p>
+  {% if payroll.paid_amount is not None %}
+  <p class="mb-0"><strong>Amount actually paid:</strong> <span class="money">{{ payroll.paid_amount|rs }}</span>{% if payroll.paid_note %} — {{ payroll.paid_note }}{% endif %}</p>
+  {% endif %}
   {% if payroll.linked_expense %}
   <p class="mb-0"><strong>Linked expense:</strong> {{ payroll.linked_expense.date|date:"d-m-Y" }} — {{ payroll.linked_expense.amount|rs }}</p>
   {% endif %}

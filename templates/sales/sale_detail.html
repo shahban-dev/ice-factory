@@ -11,6 +11,9 @@
   <div class="d-flex gap-2 flex-wrap">
     <a class="btn btn-outline-secondary" href="{% url 'sales:invoice' sale.pk %}">Invoice</a>
     <a class="btn btn-outline-secondary" href="{% url 'sales:invoice_pdf' sale.pk %}">Invoice PDF</a>
+    {% if whatsapp_invoice_url %}
+    <a class="btn btn-outline-success" href="{{ whatsapp_invoice_url }}" target="_blank" rel="noopener">Share invoice on WhatsApp</a>
+    {% endif %}
     {% if not sale.is_deleted %}
     <a class="btn btn-outline-secondary" href="{% url 'sales:sale_edit' sale.pk %}">Edit</a>
     <a class="btn btn-outline-danger" href="{% url 'sales:sale_delete' sale.pk %}">Delete</a>

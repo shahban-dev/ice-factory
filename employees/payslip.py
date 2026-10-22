@@ -58,15 +58,28 @@ def payslip_pdf_response(payroll):
         ["Base salary:", format_rs(payroll.base_salary)],
         ["Bonus:", format_rs(payroll.bonus)],
         ["Deductions:", format_rs(payroll.deductions)],
+    ]
+    if payroll.loan_id is not None:
+        data.append([
+            "Loan deduction:",
+            f"{format_rs(payroll.loan_deduction)} (loan of "
+            f"{format_rs(payroll.loan.amount)} from "
+            f"{payroll.loan.date.strftime('%d-%m-%Y')})",
+        ])
+    data += [
         ["Net salary:", format_rs(payroll.net_salary)],
         ["Paid date:", paid_text],
         ["Status:", payroll.get_status_display()],
     ]
+    if payroll.paid_amount is not None:
+        data.append(
+            ["Amount actually paid:", format_rs(payroll.paid_amount)])
+    net_row = next(i for i, row in enumerate(data) if row[0] == "Net salary:")
     table = Table(data, colWidths=[55 * mm, 107 * mm])
     table.setStyle(TableStyle([
         ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
         ("FONTSIZE", (0, 0), (-1, -1), 11),
-        ("LINEABOVE", (0, 4), (-1, 4), 1, colors.black),
+        ("LINEABOVE", (0, net_row), (-1, net_row), 1, colors.black),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
     ]))
     story.append(table)

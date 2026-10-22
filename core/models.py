@@ -88,6 +88,19 @@ class Settings(TimestampedModel):
     invoice_prefix = models.CharField(max_length=10, default="INV")
     tax_registration_line = models.CharField(max_length=200, blank=True)
     invoice_footer_note = models.TextField(blank=True)
+    # Week start for the profit report's "This week" preset:
+    # 0 = Monday ... 6 = Sunday. Monday is the default.
+    WEEK_START_CHOICES = [
+        (0, "Monday"),
+        (1, "Tuesday"),
+        (2, "Wednesday"),
+        (3, "Thursday"),
+        (4, "Friday"),
+        (5, "Saturday"),
+        (6, "Sunday"),
+    ]
+    week_start_day = models.PositiveIntegerField(
+        choices=WEEK_START_CHOICES, default=0)
 
     class Meta:
         verbose_name = "Factory settings"
@@ -108,6 +121,27 @@ def get_settings():
         pk=1, defaults={"factory_name": "Ice Factory"}
     )
     return obj
+
+
+class SubmittedForm(models.Model):
+    """One row per successfully submitted create form, keyed by the
+    hidden token rendered with the form. A double-tap (or a browser
+    back-button resubmit) replays the same token: the view sees the
+    row and redirects to the original record instead of creating a
+    second one. Tokens are random UUIDs, so a fresh form always gets
+    a fresh token and normal repeat entries are unaffected. This is
+    technical bookkeeping, not business data: no history, no
+    soft-delete."""
+
+    token = models.CharField(max_length=36, unique=True)
+    user = models.ForeignKey(
+        "auth.User", on_delete=models.CASCADE, related_name="submitted_forms"
+    )
+    success_url = models.CharField(max_length=500)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.token} -> {self.success_url}"
 
 
 class InvoiceCounter(models.Model):

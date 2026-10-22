@@ -43,6 +43,9 @@
 <div class="d-flex flex-wrap gap-2 mb-3">
   <a class="btn btn-brand" href="{% url 'sales:sale_create' %}?customer={{ customer.pk }}">New sale</a>
   <a class="btn btn-outline-secondary" href="{% url 'sales:payment_create' %}?customer={{ customer.pk }}">Record payment</a>
+  {% if whatsapp_dues_url %}
+  <a class="btn btn-outline-success" href="{{ whatsapp_dues_url }}" target="_blank" rel="noopener">Send dues reminder on WhatsApp</a>
+  {% endif %}
   <a class="btn btn-outline-secondary" href="{% url 'customers:ledger_pdf' customer.pk %}?from={{ date_from }}&to={{ date_to }}">Ledger PDF</a>
   <a class="btn btn-outline-secondary" href="{% url 'customers:ledger_excel' customer.pk %}?from={{ date_from }}&to={{ date_to }}">Ledger Excel</a>
 </div>

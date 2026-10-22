@@ -33,6 +33,33 @@ ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 if DEBUG and not ALLOWED_HOSTS:
     ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 
+# DEBUG must never serve a public host: with DEBUG on, a bad URL shows a
+# full traceback (settings, paths, SQL). Local hosts are allowed because
+# the documented local test — phone on the same Wi-Fi — needs a LAN
+# address in ALLOWED_HOSTS; anything public is refused at startup.
+if DEBUG:
+    import ipaddress
+
+    def _is_local_host(host):
+        host = host.strip().lower()
+        if host in ("localhost", "[::1]") or host.endswith(".localhost"):
+            return True
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            # A hostname that is not localhost is treated as public:
+            # resolving it at startup would add a DNS dependency.
+            return False
+        return address.is_loopback or not address.is_global
+
+    public_hosts = [h for h in ALLOWED_HOSTS if not _is_local_host(h)]
+    if public_hosts:
+        raise ValueError(
+            "DEBUG=True is not allowed with a public host in ALLOWED_HOSTS "
+            f"({', '.join(public_hosts)}). Set DEBUG=False for a live host, "
+            "or keep ALLOWED_HOSTS to localhost / your local network only."
+        )
+
 # CSRF: trust the same hosts we serve. An explicit env value wins;
 # otherwise derive https:// origins from ALLOWED_HOSTS, so a new live
 # host (Render, VPS domain) works by setting ALLOWED_HOSTS alone.

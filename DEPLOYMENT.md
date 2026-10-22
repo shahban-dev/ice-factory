@@ -100,7 +100,9 @@ nano .env
 Fill in `.env` (see the comments in the file):
 
 - `SECRET_KEY` — generate with `python -c "import secrets; print(secrets.token_urlsafe(50))"`.
-- `DEBUG=False` — never True in production.
+- `DEBUG=False` — never True in production. The app refuses to start
+  with DEBUG=True on a public host (localhost and private
+  local-network addresses are the only exception, for local testing).
 - `DATABASE_URL=postgres://icefactory:CHOOSE-A-STRONG-PASSWORD@127.0.0.1:5432/icefactory`
 - `ALLOWED_HOSTS=ice.example.com` — your real domain.
 - `ADMIN_URL=` — something private, e.g. `my-secret-panel/`.
@@ -144,7 +146,7 @@ User=icefactory
 Group=icefactory
 WorkingDirectory=/home/icefactory/ice-factory
 EnvironmentFile=/home/icefactory/ice-factory/.env
-ExecStart=/home/icefactory/ice-factory/.venv/bin/gunicorn config.wsgi:application --bind 127.0.0.1:8000 --workers 3
+ExecStart=/home/icefactory/ice-factory/.venv/bin/gunicorn config.wsgi:application --bind 127.0.0.1:8000 --workers 3 --timeout 120
 Restart=on-failure
 
 [Install]
@@ -156,6 +158,21 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now icefactory
 sudo systemctl status icefactory
 ```
+
+### Password reset (a user forgot their password)
+
+There is no self-service reset — that is deliberate, with only two
+accounts. SSH in as the app user and run:
+
+```bash
+cd /home/icefactory/ice-factory
+.venv/bin/python manage.py changepassword <username>
+```
+
+It prompts for the new password twice (at least 10 characters). No
+data is touched. If the account is also locked from 5 wrong attempts,
+wait out the 15 minutes, or have the other user clear the lock from
+the admin panel (the custom admin URL in `.env`).
 
 ## 7. Nginx + HTTPS
 
@@ -242,6 +259,14 @@ crontab -e
 Verify the first run: `python manage.py backup_db`, then check the
 Settings page — it shows the last successful backup — and confirm the
 file exists both locally and on the remote (`rclone ls`).
+
+Encryption is mandatory outside DEBUG mode: without
+`BACKUP_ENCRYPTION_PASSPHRASE` set, `backup_db` refuses to write an
+unencrypted backup (and logs the failure) unless you pass
+`--allow-unencrypted` for a deliberate exception. Backup files are
+created readable only by the server user (mode 600). If no backup has
+succeeded for 36 hours, a warning banner appears on the dashboard —
+treat it as urgent, not informational.
 
 Retention is automatic: the newest backup of each day for 30 days, plus
 the newest backup of each month for 12 months. Older files are deleted.

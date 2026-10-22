@@ -1,9 +1,11 @@
 """Product, sale, payment and invoice views."""
 
+import uuid
 from decimal import Decimal
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models import DecimalField, OuterRef, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404, redirect, render
@@ -13,7 +15,13 @@ from django.views.generic import ListView
 
 from core.permissions import PermissionRequiredMixin
 from core.params import parse_int
-from core.services import ConcurrentEditError
+from core.models import get_settings
+from core.services import (
+    ConcurrentEditError,
+    claim_form_token,
+    finish_form_token,
+)
+from core.whatsapp import invoice_message, whatsapp_url
 from customers.models import Customer
 from sales.forms import PaymentForm, ProductForm, SaleForm, SaleItemFormSet
 from sales.models import Payment, Product, Sale
@@ -197,7 +205,9 @@ class SaleCreateView(PermissionRequiredMixin, View):
 
     def get(self, request):
         preselected = _preselected_customer(request)
-        initial = {"customer": preselected.pk} if preselected else {}
+        initial = {"form_token": str(uuid.uuid4())}
+        if preselected:
+            initial["customer"] = preselected.pk
         context = _sale_form_context(
             SaleForm(initial=initial), SaleItemFormSet(instance=Sale()),
             preselected_customer=preselected,
@@ -210,27 +220,40 @@ class SaleCreateView(PermissionRequiredMixin, View):
         formset = SaleItemFormSet(request.POST, instance=Sale())
         if form.is_valid() and formset.is_valid():
             try:
-                sale = create_sale(
-                    user=request.user,
-                    date=form.cleaned_data["date"],
-                    customer=form.cleaned_data["customer"],
-                    discount=form.cleaned_data["discount"] or 0,
-                    items_data=_formset_items_data(formset),
-                    paid_now=form.cleaned_data["paid_now"] or 0,
-                    paid_method=form.cleaned_data["paid_method"],
-                    notes=form.cleaned_data["notes"],
-                )
+                with transaction.atomic():
+                    record, is_new = claim_form_token(
+                        request.user, form.cleaned_data.get("form_token", ""))
+                    if not is_new and record.success_url:
+                        messages.info(
+                            request,
+                            "This sale was already saved — showing the "
+                            "original instead of saving it twice.")
+                        return redirect(record.success_url)
+                    sale = create_sale(
+                        user=request.user,
+                        date=form.cleaned_data["date"],
+                        customer=form.cleaned_data["customer"],
+                        discount=form.cleaned_data["discount"] or 0,
+                        items_data=_formset_items_data(formset),
+                        paid_now=form.cleaned_data["paid_now"] or 0,
+                        paid_method=form.cleaned_data["paid_method"],
+                        notes=form.cleaned_data["notes"],
+                    )
+                    action = request.POST.get("action", "save")
+                    if action == "save_and_print":
+                        url = (f"{reverse('sales:invoice', args=[sale.pk])}"
+                               "?autoprint=1")
+                    elif action == "save_and_new":
+                        url = reverse("sales:sale_create")
+                    else:
+                        url = reverse("sales:sale_detail", args=[sale.pk])
+                    finish_form_token(record, url)
             except ValidationError as exc:
                 form.add_error(None, exc)
             else:
                 messages.success(
                     request, f"Sale {sale.invoice_number} saved.")
-                action = request.POST.get("action", "save")
-                if action == "save_and_print":
-                    return redirect(f"{reverse('sales:invoice', args=[sale.pk])}?autoprint=1")
-                if action == "save_and_new":
-                    return redirect("sales:sale_create")
-                return redirect("sales:sale_detail", pk=sale.pk)
+                return redirect(url)
         context = _sale_form_context(
             form, formset, preselected_customer=_preselected_customer(request))
         context["title"] = "New sale"
@@ -299,17 +322,23 @@ class SaleDetailView(PermissionRequiredMixin, View):
         allocation = None
         remaining = None
         status = None
+        whatsapp_invoice_url = None
         if sale.customer is not None:
             allocation = allocate_customer(sale.customer)
             for entry in allocation["sales"]:
                 if entry["sale"].id == sale.id:
                     remaining = entry["remaining"]
                     status = entry["status"]
+            whatsapp_invoice_url = whatsapp_url(
+                sale.customer.phone,
+                invoice_message(
+                    get_settings().factory_name, sale, remaining))
         return render(request, "sales/sale_detail.html", {
             "sale": sale,
             "allocation": allocation,
             "remaining": remaining,
             "status": status,
+            "whatsapp_invoice_url": whatsapp_invoice_url,
         })
 
 
@@ -349,17 +378,23 @@ class InvoiceView(PermissionRequiredMixin, View):
         )
         remaining = None
         outstanding = None
+        whatsapp_invoice_url = None
         if sale.customer is not None:
             allocation = allocate_customer(sale.customer)
             outstanding = allocation["balance"]
             for entry in allocation["sales"]:
                 if entry["sale"].id == sale.id:
                     remaining = entry["remaining"]
+            whatsapp_invoice_url = whatsapp_url(
+                sale.customer.phone,
+                invoice_message(
+                    get_settings().factory_name, sale, remaining))
         return render(request, "sales/invoice.html", {
             "sale": sale,
             "remaining": remaining,
             "outstanding": outstanding,
             "autoprint": request.GET.get("autoprint") == "1",
+            "whatsapp_invoice_url": whatsapp_invoice_url,
         })
 
 
@@ -411,7 +446,7 @@ class PaymentCreateView(PermissionRequiredMixin, View):
     permission_code = "payments.create"
 
     def get(self, request):
-        initial = {}
+        initial = {"form_token": str(uuid.uuid4())}
         customer_id = request.GET.get("customer")
         if customer_id:
             try:
@@ -438,14 +473,28 @@ class PaymentCreateView(PermissionRequiredMixin, View):
                 )
             else:
                 try:
-                    payment = create_payment(
-                        user=request.user,
-                        customer=customer,
-                        date=form.cleaned_data["date"],
-                        amount=form.cleaned_data["amount"],
-                        method=form.cleaned_data["method"],
-                        reference=form.cleaned_data["reference"],
-                    )
+                    with transaction.atomic():
+                        record, is_new = claim_form_token(
+                            request.user,
+                            form.cleaned_data.get("form_token", ""))
+                        if not is_new and record.success_url:
+                            messages.info(
+                                request,
+                                "This payment was already recorded — "
+                                "showing the original instead of recording "
+                                "it twice.")
+                            return redirect(record.success_url)
+                        payment = create_payment(
+                            user=request.user,
+                            customer=customer,
+                            date=form.cleaned_data["date"],
+                            amount=form.cleaned_data["amount"],
+                            method=form.cleaned_data["method"],
+                            reference=form.cleaned_data["reference"],
+                        )
+                        url = reverse(
+                            "customers:detail", args=[payment.customer.pk])
+                        finish_form_token(record, url)
                 except ValidationError as exc:
                     form.add_error(None, exc)
                 else:
@@ -456,7 +505,7 @@ class PaymentCreateView(PermissionRequiredMixin, View):
                             "This payment is more than the balance. The excess "
                             "is kept as advance credit.")
                     messages.success(request, "Payment recorded.")
-                    return redirect("customers:detail", pk=payment.customer.pk)
+                    return redirect(url)
         return render(request, "sales/payment_form.html", {
             "form": form, "title": "Record payment",
         })

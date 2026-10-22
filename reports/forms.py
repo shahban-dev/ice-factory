@@ -10,7 +10,8 @@ class SettingsForm(BootstrapWidgetsMixin, forms.ModelForm):
     class Meta:
         model = Settings
         fields = ["factory_name", "address", "phone", "invoice_prefix",
-                  "tax_registration_line", "invoice_footer_note"]
+                  "tax_registration_line", "invoice_footer_note",
+                  "week_start_day"]
         widgets = {
             "factory_name": forms.TextInput(attrs={"autofocus": True}),
         }

@@ -9,7 +9,10 @@ Configuration (environment):
 - BACKUP_DIR: where backups are kept (default: <project>/backups).
 - BACKUP_ENCRYPTION_PASSPHRASE: encrypts the stored file with
   openssl AES-256-CBC. Without it, the file is stored compressed only
-  and the log notes that it is unencrypted.
+  and the log notes that it is unencrypted. In production (DEBUG off)
+  an unencrypted backup is REFUSED unless --allow-unencrypted is
+  passed — a database backup contains every customer, sale and salary,
+  and must not sit on disk in the clear by accident.
 - BACKUP_RCLONE_REMOTE: e.g. "b2:ice-factory-backups". When set, the
   file is also copied off-server with rclone.
 
@@ -31,7 +34,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from core.models import BackupLog
@@ -43,21 +46,39 @@ NAME_RE = re.compile(r"backup-(\d{4}-\d{2}-\d{2})-\d{6}\..*")
 class Command(BaseCommand):
     help = "Back up the database: dump, compress, encrypt, upload, rotate, log."
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--allow-unencrypted", action="store_true",
+            help="Store the backup unencrypted even when DEBUG is off. "
+                 "Only for a deliberate, one-off decision.",
+        )
+
     def handle(self, *args, **options):
         backup_dir = Path(
             os.environ.get("BACKUP_DIR", settings.BASE_DIR / "backups")
         )
         backup_dir.mkdir(parents=True, exist_ok=True)
         try:
-            data, filename = make_database_dump()
             passphrase = os.environ.get("BACKUP_ENCRYPTION_PASSPHRASE", "")
+            if (not passphrase and not settings.DEBUG
+                    and not options["allow_unencrypted"]):
+                raise CommandError(
+                    "Refusing to store an unencrypted backup outside DEBUG "
+                    "mode. Set BACKUP_ENCRYPTION_PASSPHRASE, or pass "
+                    "--allow-unencrypted for a deliberate exception."
+                )
+            data, filename = make_database_dump()
             encrypted = False
             if passphrase:
                 data = encrypt_bytes(data, passphrase)
                 filename += ".enc"
                 encrypted = True
             target = backup_dir / filename
-            target.write_bytes(data)
+            # Mode 600 from the moment the file is created: backups hold
+            # the whole business, and must not be world-readable.
+            fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data)
             message = f"Saved {filename} ({len(data)} bytes)"
             if not encrypted:
                 message += " — stored UNENCRYPTED (no passphrase set)"

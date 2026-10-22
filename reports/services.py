@@ -10,6 +10,7 @@
 """
 
 import calendar
+import datetime
 from datetime import date
 from decimal import Decimal
 
@@ -18,8 +19,10 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from customers.models import Customer
+from core.models import BackupLog, get_settings
 from core.params import parse_int
-from employees.models import Payroll
+from core.whatsapp import dues_message, whatsapp_url
+from employees.models import Loan, Payroll
 from expenses.models import Expense
 from sales.models import Payment, Sale, SaleItem
 from sales.services import (
@@ -86,18 +89,57 @@ def month_figures(year, month):
     first, last = date(year, month, 1), date(
         year, month, calendar.monthrange(year, month)[1]
     )
-    billed = billed_between(first, last)
-    collected = _sum_payments_between(first, last)
-    expenses = _sum_expenses_between(first, last)
+    return period_figures(first, last)
+
+
+def period_figures(start, end):
+    """Billed, collected, expenses, profits for any date range."""
+    billed = billed_between(start, end)
+    collected = _sum_payments_between(start, end)
+    expenses = _sum_expenses_between(start, end)
     return {
         "billed": billed,
         "collected": collected,
         "expenses": expenses,
         "sales_profit": billed - expenses,
         "cash_profit": collected - expenses,
-        "first": first,
-        "last": last,
+        "first": start,
+        "last": end,
     }
+
+
+def week_range(day, week_start):
+    """The (start, end) week containing ``day``. week_start is
+    0 = Monday ... 6 = Sunday, as stored on Settings."""
+    offset = (day.weekday() - week_start) % 7
+    start = day - datetime.timedelta(days=offset)
+    return start, start + datetime.timedelta(days=6)
+
+
+def preset_range(preset, today, week_start, custom_from=None, custom_to=None):
+    """Resolve a profit-report preset to (start, end, effective_preset).
+    Unknown presets and invalid custom dates fall back to this month,
+    never to an error."""
+    if preset == "today":
+        return today, today, "today"
+    if preset == "yesterday":
+        yesterday = today - datetime.timedelta(days=1)
+        return yesterday, yesterday, "yesterday"
+    if preset == "week":
+        start, end = week_range(today, week_start)
+        return start, end, "week"
+    if preset == "last_month":
+        y, m = today.year, today.month - 1
+        if m == 0:
+            m, y = 12, y - 1
+        last_day = calendar.monthrange(y, m)[1]
+        return date(y, m, 1), date(y, m, last_day), "last_month"
+    if preset == "custom" and custom_from and custom_to:
+        if custom_to < custom_from:
+            custom_from, custom_to = custom_to, custom_from
+        return custom_from, custom_to, "custom"
+    last_day = calendar.monthrange(today.year, today.month)[1]
+    return date(today.year, today.month, 1), date(today.year, today.month, last_day), "month"
 
 
 def dashboard_data():
@@ -127,10 +169,24 @@ def dashboard_data():
         if c.balance > 0
     ]
     debtors.sort(key=lambda c: c.balance, reverse=True)
+    today_billed = billed_between(today, today)
+    today_collected = _sum_payments_between(today, today)
+    today_expenses = _sum_expenses_between(today, today)
+    last_backup = BackupLog.objects.filter(
+        status=BackupLog.STATUS_SUCCESS).order_by("-created_at").first()
+    backup_stale = (
+        last_backup is None
+        or timezone.now() - last_backup.created_at
+        > datetime.timedelta(hours=36)
+    )
     return {
         "today": today,
-        "today_billed": billed_between(today, today),
-        "today_collected": _sum_payments_between(today, today),
+        "backup_stale": backup_stale,
+        "today_billed": today_billed,
+        "today_collected": today_collected,
+        "today_expenses": today_expenses,
+        "today_sales_profit": today_billed - today_expenses,
+        "today_cash_profit": today_collected - today_expenses,
         "total_outstanding": total_outstanding(),
         "month": month,
         "chart_months": chart_months,
@@ -186,6 +242,30 @@ def monthly_report(year, month):
             date__gte=first, date__lte=last, category__is_system=True
         ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
     )
+    # Salary earned for this month: what the month's payroll rows cost
+    # (net + loan deduction), whether paid yet or not. Salaries paid
+    # above is the cash/expense dated in the month — the two differ
+    # when a month's salary is paid in the next month.
+    salary_earned = (
+        Payroll.objects.filter(year=year, month=month)
+        .aggregate(
+            total=Sum(F("net_salary") + F("loan_deduction"),
+                      output_field=DecimalField())
+        )["total"] or Decimal("0")
+    )
+    # Loans outstanding to employees at month end: loans given up to
+    # month end, minus repayments on rows actually paid by month end.
+    loans_given = (
+        Loan.objects.filter(date__lte=last)
+        .aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    )
+    loans_repaid = (
+        Payroll.objects.filter(
+            status=Payroll.STATUS_PAID, loan__isnull=False,
+            paid_date__lte=last,
+        ).aggregate(total=Sum("loan_deduction"))["total"] or Decimal("0")
+    )
+    loans_outstanding = loans_given - loans_repaid
     # Blocks sold per product. SaleItem has no soft-delete flag, so the
     # sale itself must be filtered: a deleted sale's lines must not count.
     blocks = (
@@ -224,6 +304,8 @@ def monthly_report(year, month):
         "month_name": calendar.month_name[month],
         "by_category": list(by_category),
         "salaries_paid": salaries_paid,
+        "salary_earned": salary_earned,
+        "loans_outstanding": loans_outstanding,
         "blocks": list(blocks),
         "top_customers": list(billed_by_customer),
         "outstanding_at_month_end": outstanding,
@@ -231,23 +313,51 @@ def monthly_report(year, month):
 
 
 def dues_report():
-    """Customers who owe, with oldest unpaid invoice and last payment date."""
+    """Customers who owe, with oldest unpaid invoice and last payment date.
+
+    Bulk version: one sales query, one payments query and one aggregate
+    for ALL debtors — the old loop ran allocate_customer (2-3 queries)
+    plus a last-payment aggregate per debtor, ~4 queries each, which is
+    ~6,000 queries at 1,500 debtors. The allocation math is unchanged:
+    the same allocate_customer runs per debtor, just on pre-fetched lists.
+    """
+    from collections import defaultdict
+
+    factory_name = get_settings().factory_name
+    debtors = [
+        c for c in annotate_customer_balances(Customer.objects.all())
+        if c.balance > 0
+    ]
+    sales_by_customer = defaultdict(list)
+    for sale in Sale.objects.filter(customer__in=debtors).prefetch_related(
+            "items").order_by("date", "id"):
+        sales_by_customer[sale.customer_id].append(sale)
+    payments_by_customer = defaultdict(list)
+    for payment in Payment.objects.filter(customer__in=debtors):
+        payments_by_customer[payment.customer_id].append(payment)
+    last_payments = dict(
+        Payment.objects.filter(customer__in=debtors)
+        .values("customer").annotate(latest=Max("date"))
+        .values_list("customer", "latest")
+    )
     rows = []
-    for customer in annotate_customer_balances(Customer.objects.all()):
-        if customer.balance <= 0:
-            continue
-        allocation = allocate_customer(customer)
+    for customer in debtors:
+        allocation = allocate_customer(
+            customer,
+            sales=sales_by_customer.get(customer.id, []),
+            payments=payments_by_customer.get(customer.id, []),
+        )
         unpaid_dates = [
             s["sale"].date for s in allocation["sales"] if s["remaining"] > 0
         ]
-        last_payment = Payment.objects.filter(customer=customer).aggregate(
-            latest=Max("date")
-        )["latest"]
         rows.append({
             "customer": customer,
             "balance": customer.balance,
             "oldest_unpaid": min(unpaid_dates) if unpaid_dates else None,
-            "last_payment": last_payment,
+            "last_payment": last_payments.get(customer.id),
+            "whatsapp_url": whatsapp_url(
+                customer.phone,
+                dues_message(factory_name, customer.name, customer.balance)),
         })
     rows.sort(key=lambda r: r["balance"], reverse=True)
     return rows

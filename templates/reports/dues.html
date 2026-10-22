@@ -11,7 +11,7 @@
 <div class="table-responsive">
   <table class="table table-cards align-middle">
     <thead>
-      <tr><th>Customer</th><th>Balance</th><th>Oldest unpaid invoice</th><th>Last payment</th></tr>
+      <tr><th>Customer</th><th>Balance</th><th>Oldest unpaid invoice</th><th>Last payment</th><th></th></tr>
     </thead>
     <tbody>
       {% for row in rows %}
@@ -20,9 +20,10 @@
         <td data-label="Balance" class="money text-money-out">{{ row.balance|rs }}</td>
         <td data-label="Oldest unpaid invoice">{{ row.oldest_unpaid|date:"d-m-Y"|default:"—" }}</td>
         <td data-label="Last payment">{{ row.last_payment|date:"d-m-Y"|default:"—" }}</td>
+        <td>{% if row.whatsapp_url %}<a class="btn btn-sm btn-outline-success" href="{{ row.whatsapp_url }}" target="_blank" rel="noopener">Remind on WhatsApp</a>{% endif %}</td>
       </tr>
       {% empty %}
-      <tr><td colspan="4" class="text-muted">Nobody owes anything right now.</td></tr>
+      <tr><td colspan="5" class="text-muted">Nobody owes anything right now.</td></tr>
       {% endfor %}
     </tbody>
   </table>

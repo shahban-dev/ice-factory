@@ -89,7 +89,7 @@ def annotate_customer_balances(qs, at_date=None):
     ).annotate(balance=F("opening_balance") + F("billed") - F("paid"))
 
 
-def allocate_customer(customer):
+def allocate_customer(customer, sales=None, payments=None):
     """THE allocation function. Used by the ledger, invoice, customer list
     and reports — nowhere else computes invoice status.
 
@@ -107,12 +107,20 @@ def allocate_customer(customer):
     Customer balance totals never change: balance is always
     opening + billed - paid, whatever the allocation order.
     Returns balance, credit, billed, paid and per-sale allocation/status.
+
+    Callers may pass pre-fetched ``sales`` (with items prefetched,
+    ordered by (date, id)) and ``payments`` to avoid one query pair per
+    customer — the dues report does this for all debtors at once. The
+    computation is identical either way; the lists only skip queries.
     """
-    sales = list(
-        customer.sales.all()
-        .prefetch_related("items")
-        .order_by("date", "id")
-    )
+    if sales is None:
+        sales = list(
+            customer.sales.all()
+            .prefetch_related("items")
+            .order_by("date", "id")
+        )
+    else:
+        sales = sorted(sales, key=lambda s: (s.date, s.id))
     sale_ids = {sale.id for sale in sales}
     # Partition the customer's non-deleted payments: linked to one of
     # this customer's own sales, or general pool money. (A payment whose
@@ -120,7 +128,8 @@ def allocate_customer(customer):
     # such mismatches from being created.)
     linked_by_sale = {}
     pool = Decimal("0")
-    payments = list(customer.payments.all())
+    if payments is None:
+        payments = list(customer.payments.all())
     for payment in payments:
         if payment.sale_id in sale_ids:
             linked_by_sale[payment.sale_id] = (

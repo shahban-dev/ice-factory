@@ -399,6 +399,61 @@ documentation.
   decimals; recycle-bin restore failures show a message instead of
   500.
 
+## Group B fixes (2026-10-22; 163 tests, all passing on SQLite and PostgreSQL 16)
+
+- Loans (B1): a loan is a receivable, not an expense. Giving one
+  costs nothing on the salary line; each month's payroll proposes a
+  deduction from the oldest active loan (min of installment,
+  remaining, and that month's pay, floored so net never goes below
+  zero); marking paid records the repayment, reopening reverses it,
+  and the loan settles automatically at zero. The monthly report
+  shows loans outstanding to employees at month end.
+- Salary earned vs paid (B3): the monthly report now shows both —
+  salary earned (that month's payroll rows: net + loan deduction) and
+  salaries paid (Salaries expenses dated in the month). Mark paid
+  accepts an amount different from the net, but only with a written
+  reason; the salary expense is amount paid + loan deduction. A
+  repayment-only row (net zero, deduction above zero) can be marked
+  paid.
+- Profit report (B2): Reports → Profit report with presets
+  (today/yesterday/this week/last week/this month/last month/custom);
+  a week-start-day setting in Settings (Monday by default). The
+  dashboard also shows today's expenses and today's profit.
+- Duplicate-submit protection (B4): sale, payment and expense forms
+  carry a one-time token — a double tap or a browser resubmit creates
+  one record and shows the original; a failed save rolls the token
+  back, so correcting and resubmitting still works.
+- WhatsApp helpers (B5): wa.me links on the sale page, the invoice,
+  the customer page and the dues report. Nothing is sent
+  automatically; the user reviews and sends from their own WhatsApp.
+  Only Pakistani mobile numbers (03XX…) get a button — landlines do
+  not. Whether to accept landlines, and fractional quantities (kg,
+  half blocks), is still the client's decision (B7, open).
+- Password change + admin safety (B6): any logged-in user can change
+  their own password from the top menu; a forgotten password is
+  reset by the developer from the server shell (see DEPLOYMENT.md).
+  The Django admin can no longer hard-delete any business record
+  (Customer, Sale, SaleItem, Payment, Expense, ExpenseCategory,
+  Employee, Payroll, Product, Loan) — deletion stays soft, through
+  the app, with an audit trail.
+- Backup safety (B8): `backup_db` refuses an unencrypted backup
+  outside DEBUG mode unless --allow-unencrypted is passed; backup
+  files are created mode 600; the dashboard warns when no backup has
+  succeeded in 36 hours; gunicorn runs with --timeout 120.
+- Performance (B9): the dues report now runs 6 queries for any
+  number of debtors (was ~4 per debtor); the audit log
+  select_relateds its users and pairs each row's predecessor in
+  memory (was one query per changed row). Dues report and dues page
+  run in under 3 seconds at 500 customers / 3,000 sales (tested).
+  Loans were also added to the audit log and the recycle bin, with a
+  restore guard (a loan cannot be restored while its employee is
+  deleted).
+- Config safety (B10): .env.example now defaults to DEBUG=False;
+  the app refuses to start with DEBUG=True on a public host
+  (localhost, loopback and private local-network addresses are still
+  allowed, because phone testing on the local Wi-Fi needs a LAN
+  address in ALLOWED_HOSTS).
+
 ## Process (from the brief)
 
 - Questions-first reply, then wait — **Done** (Phase 0).

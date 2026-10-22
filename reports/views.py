@@ -21,6 +21,8 @@ from reports.services import (
     dues_report,
     expense_report,
     monthly_report,
+    period_figures,
+    preset_range,
     sales_register,
 )
 from reports.system_services import (
@@ -80,6 +82,31 @@ class DuesReportView(PermissionRequiredMixin, View):
         if fmt == "excel":
             return exports.dues_excel(rows)
         return render(request, "reports/dues.html", {"rows": rows})
+
+
+class ProfitReportView(PermissionRequiredMixin, View):
+    """Profit for a preset range or a custom range. Billed, collected,
+    expenses, sales profit and cash profit, on the same definitions as
+    the monthly report. The week preset starts on the day set in
+    Settings (Monday by default)."""
+
+    permission_code = "reports.view"
+    PRESETS = ["today", "yesterday", "week", "month", "last_month", "custom"]
+
+    def get(self, request):
+        today = timezone.localdate()
+        week_start = get_settings().week_start_day
+        preset = request.GET.get("preset", "month")
+        custom_from = parse_date(request.GET.get("from"))
+        custom_to = parse_date(request.GET.get("to"))
+        start, end, effective = preset_range(
+            preset, today, week_start, custom_from, custom_to)
+        figures = period_figures(start, end)
+        return render(request, "reports/profit.html", {
+            "figures": figures, "start": start, "end": end,
+            "preset": effective, "presets": self.PRESETS,
+            "custom_from": custom_from, "custom_to": custom_to,
+        })
 
 
 class SalesRegisterView(PermissionRequiredMixin, View):

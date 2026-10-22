@@ -4,7 +4,7 @@
 {% block back %}<a href="{% url 'employees:payroll_list' %}" class="btn btn-outline-secondary mb-3 no-print">← Back to payroll</a>{% endblock %}
 {% block content %}
 <h1 class="h4 mb-3">Edit payroll — {{ payroll.employee.name }} ({{ month_name }} {{ payroll.year }})</h1>
-<p class="text-muted">Base salary is a snapshot from generation and cannot be edited. Change the bonus or deductions; the net is recomputed on save and must stay at or above zero.</p>
+<p class="text-muted">Base salary is a snapshot from generation and cannot be edited. Change the bonus, deductions, or loan deduction; the net is recomputed on save and must stay at or above zero. A loan deduction can never exceed what is still owed on that loan.</p>
 <form method="post" class="card p-3 p-md-4">
   {% csrf_token %}
   {% if form.non_field_errors %}

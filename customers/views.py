@@ -14,7 +14,9 @@ from django.views.generic import ListView
 
 from core.params import parse_date
 from core.permissions import PermissionRequiredMixin
+from core.models import get_settings
 from core.services import ConcurrentEditError, save_form_with_version, soft_delete_objects
+from core.whatsapp import dues_message, whatsapp_url
 from customers.forms import CustomerForm, CustomerImportUploadForm
 from customers.models import Customer, normalize_phone
 from customers.services import parse_import_file, save_import_rows
@@ -68,6 +70,11 @@ class CustomerDetailView(PermissionRequiredMixin, View):
             "allocation": allocation,
             "date_from": request.GET.get("from", ""),
             "date_to": request.GET.get("to", ""),
+            "whatsapp_dues_url": whatsapp_url(
+                customer.phone,
+                dues_message(
+                    get_settings().factory_name, customer.name,
+                    allocation["balance"])),
         })
 
 

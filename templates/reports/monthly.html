@@ -33,6 +33,8 @@
   <div class="d-flex justify-content-between"><span>Collected</span><strong class="money text-money-in">{{ data.collected|rs }}</strong></div>
   <div class="d-flex justify-content-between"><span>Expenses</span><strong class="money text-money-out">{{ data.expenses|rs }}</strong></div>
   <div class="d-flex justify-content-between"><span>Salaries paid</span><strong class="money text-money-out">{{ data.salaries_paid|rs }}</strong></div>
+  <div class="d-flex justify-content-between"><span>Salary earned for this month</span><strong class="money text-money-out">{{ data.salary_earned|rs }}</strong></div>
+  <div class="d-flex justify-content-between"><span>Loans outstanding to employees</span><strong class="money text-money-out">{{ data.loans_outstanding|rs }}</strong></div>
   <div class="d-flex justify-content-between"><span>Sales profit (billed − expenses)</span><strong class="money">{{ data.sales_profit|rs }}</strong></div>
   <div class="d-flex justify-content-between"><span>Cash profit (collected − expenses)</span><strong class="money">{{ data.cash_profit|rs }}</strong></div>
   <div class="d-flex justify-content-between"><span>Outstanding at month end</span><strong class="money text-money-out">{{ data.outstanding_at_month_end|rs }}</strong></div>

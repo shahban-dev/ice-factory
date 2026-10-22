@@ -5,6 +5,7 @@
 <h1 class="h4 mb-3">Reports</h1>
 <div class="list-group">
   <a class="list-group-item list-group-item-action" href="{% url 'reports:monthly' %}">Monthly report — billed, collected, expenses, profits, blocks sold, top customers</a>
+  <a class="list-group-item list-group-item-action" href="{% url 'reports:profit' %}">Profit report — daily, weekly and monthly profit</a>
   <a class="list-group-item list-group-item-action" href="{% url 'reports:dues' %}">Customer dues report — who owes, oldest unpaid invoice, last payment</a>
   <a class="list-group-item list-group-item-action" href="{% url 'reports:register' %}">Sales register — sales in a date range, by customer or product</a>
   <a class="list-group-item list-group-item-action" href="{% url 'reports:expense_report' %}">Expense report — expenses in a date range, by category</a>

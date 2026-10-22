@@ -21,6 +21,40 @@
   {% if employee.notes %}<p class="mb-0"><strong>Notes:</strong> {{ employee.notes }}</p>{% endif %}
 </div>
 
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+  <h2 class="h5 mb-0">Loans</h2>
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'employees:loan_create' employee.pk %}">New loan</a>
+</div>
+<p class="mb-3"><strong>Outstanding:</strong> <span class="money">{{ loans_outstanding|rs }}</span></p>
+<div class="table-responsive mb-4">
+  <table class="table table-cards align-middle">
+    <thead>
+      <tr><th>Date</th><th>Amount</th><th>Installment</th><th>Repaid</th><th>Remaining</th><th>Status</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for row in loan_rows %}
+      <tr>
+        <td data-label="Date">{{ row.loan.date|date:"d-m-Y" }}</td>
+        <td data-label="Amount" class="money">{{ row.loan.amount|rs }}</td>
+        <td data-label="Installment" class="money">{{ row.loan.monthly_installment|rs }}</td>
+        <td data-label="Repaid" class="money">{{ row.repaid|rs }}</td>
+        <td data-label="Remaining" class="money">{{ row.remaining|rs }}</td>
+        <td data-label="Status">
+          {% if row.loan.status == "settled" %}<span class="badge text-bg-success">Settled</span>
+          {% else %}<span class="badge text-bg-warning">Active</span>{% endif %}
+        </td>
+        <td class="d-flex gap-1">
+          <a class="btn btn-sm btn-outline-secondary" href="{% url 'employees:loan_edit' row.loan.pk %}">Edit</a>
+          <a class="btn btn-sm btn-outline-danger" href="{% url 'employees:loan_delete' row.loan.pk %}">Delete</a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7" class="text-muted">No loans.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
 <h2 class="h5">Payroll history</h2>
 <div class="table-responsive">
   <table class="table table-cards align-middle">

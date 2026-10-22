@@ -12,12 +12,20 @@ type the wrong password 5 times, your account locks for 15 minutes —
 this is protection against guessing, not a fault. Wait, or ask the
 other user to clear the lock from the admin panel.
 
+To change your own password, use **Change password** next to your
+username in the top menu. If you forget your password entirely, you
+cannot reset it yourself — ask the developer to reset it from the
+server (see DEPLOYMENT.md); it takes a minute and your data is
+untouched.
+
 On a phone, the menu is behind the button at the top. All buttons are
 big enough to tap, and tables turn into stacked cards.
 
 ## The dashboard (home page)
 
 - **Today's billed / collected** — what was sold and what was received today.
+- **Today's expenses / profit** — today's expenses, and today's profit
+  (billed minus expenses).
 - **Total outstanding dues** — everything all customers owe right now.
 - **This month** — billed, collected, expenses, and two profit numbers:
   - *Sales profit* = billed minus expenses.
@@ -80,6 +88,10 @@ deleted; deactivated products disappear from the sale form.
 3. Discount, if any (it cannot be more than the subtotal).
 4. Payment: *Paid in full*, *Paid nothing*, or a custom amount.
 5. Save, Save and print, or Save and new.
+
+If you tap Save twice by accident, only one sale is created — the
+second tap shows you the sale that was already saved. The same guard
+covers payments and expenses.
 
 **Invoice numbers** look like INV-2026-0001: the year, then a running
 number. A deleted invoice's number is never reused, and a deleted
@@ -175,19 +187,36 @@ leaving date are listed as a warning and get no row.
   a 31-day month gets 16 days.
 - *Base salary* is the monthly salary scaled by days employed. A full
   month is exactly the monthly salary, to the rupee.
-- Add a bonus or deductions by hand (there are no salary advances in
-  this version). Net = base + bonus − deductions; it can never be
+- Add a bonus or deductions by hand. Net = base + bonus − deductions; it can never be
   negative.
 - Changing an employee's monthly salary later does not change payroll
   rows that are already made.
 
+**Loans:** an employee's page has a Loans section. Give a loan with the
+date, the amount and the monthly installment. A loan is money the
+employee owes you — it is NOT an expense, so giving one does not change
+that month's profit. Each month's payroll proposes a deduction from the
+oldest active loan: the installment, or what is left of the loan,
+whichever is smaller, and never more than the month's pay (so net never
+goes below zero). When that payroll row is marked paid, the deduction
+counts as repaid and the loan balance drops; reopening the row reverses
+it. A loan is settled automatically when nothing is left. You cannot
+delete a loan that has already had repayments; deleting a loan with no
+repayments yet clears it from any draft payroll rows.
+
 **Paying:** open a payroll row and press Mark paid. Enter the date
 actually paid (it cannot be in the future) — the salary counts as an
 expense in the month it was PAID, not the month it was earned. The
-system creates exactly one Salaries expense for the same amount, on the
-same date. To change a paid row, press Reopen first: the row goes back
-to draft and its salary expense is removed; paying again creates a new
-one.
+amount paid is normally the net, but you can pay a different amount
+(for example a part-payment) — then a note is required, saying why.
+The system creates exactly one Salaries expense for the amount paid
+plus any loan deduction, on the same date. So a repayment never reduces
+the salary expense: a Rs 30,000 salary with a Rs 5,000 loan deduction
+shows a Rs 30,000 expense, of which Rs 25,000 reached the employee and
+Rs 5,000 repaid the loan. A row whose net is zero but which repays a
+loan can still be marked paid. To change a paid row, press Reopen
+first: the row goes back to draft and its salary expense is removed;
+paying again creates a new one.
 
 **Payslip:** open a payroll row and press Payslip PDF. It shows the
 employee, month, days employed, base, bonus, deductions, net, and paid
@@ -197,6 +226,18 @@ date. The CNIC on the payslip is masked.
 
 Reports → pick a report. Every report can be downloaded as PDF or
 Excel. The definitions below are printed on every report.
+
+**Profit report:** Reports → Profit report. Pick Today, Yesterday,
+This week, Last week, This month, Last month, or your own dates, and
+see billed, collected, expenses and both profit numbers for exactly
+that period. The week starts on the day set in Settings (Monday by
+default).
+
+**Monthly report** shows two salary lines, because they are different
+things: *salary earned* is what the month's payroll rows add up to,
+and *salaries paid* is what was actually paid out during the month
+(a September salary paid on 2 October counts in October). It also
+shows *loans outstanding to employees* at the end of the month.
 
 - **Monthly report** — billed, collected, expenses by category,
   salaries paid, both profits, blocks sold per product, top 10
@@ -245,14 +286,28 @@ cannot be restored if a live row already uses that month or CNIC.
 
 Reports → Settings. Factory name, address, phone, invoice prefix
 (default INV), an optional tax registration line that prints on
-invoices, and a footer note for invoices. The page also shows the last
-successful backup.
+invoices, a footer note for invoices, and which day the week starts
+on (for the profit report's week buttons). The page also shows the
+last successful backup.
 
 ## Backups
 
 Backups run automatically every night at 02:00 and are stored encrypted
-and copied off the server. From the Settings page you can also download
+and copied off the server. Backup files on the server can only be read
+by the server's own user — nobody else on the machine can open them.
+If no backup has succeeded for 36 hours, a warning appears on the
+dashboard: do not ignore it. From the Settings page you can also download
 a fresh backup at any time — you will be asked for your login password
 again, and the download is logged. Keep the backup passphrase somewhere
 safe off the server: without it, encrypted backups cannot be restored.
 If the server ever fails, the restore steps are in DEPLOYMENT.md.
+
+## WhatsApp messages
+
+Nothing is sent automatically. On a sale's page and on the invoice there
+is a **Share invoice on WhatsApp** button, on a customer's page a
+**Send dues reminder** button, and on the dues report one per customer.
+Each opens WhatsApp with a ready-written message — you check it and
+press send yourself. The button only appears for a Pakistani mobile
+number (03XX…); landline numbers get no button, because WhatsApp
+cannot message them.

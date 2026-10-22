@@ -95,3 +95,33 @@ def save_form_with_version(form, user, reason):
         locked._change_reason = reason
         locked.save()
         return locked
+
+
+def claim_form_token(user, token):
+    """Atomically claim a create-form token. Call inside
+    transaction.atomic, BEFORE creating the record: get_or_create
+    blocks a concurrent twin on the unique token until the first
+    transaction commits, then returns the existing row.
+
+    Returns (record, is_new). An empty or malformed token means no
+    protection (old forms, non-browser clients): (None, True) — the
+    caller creates normally and records nothing."""
+    if not token:
+        return None, True
+    try:
+        uuid.UUID(str(token))
+    except (ValueError, AttributeError):
+        return None, True
+    from core.models import SubmittedForm
+
+    record, created = SubmittedForm.objects.get_or_create(
+        token=str(token), user=user, defaults={"success_url": ""})
+    return record, created
+
+
+def finish_form_token(record, success_url):
+    """Point a claimed token at the record it created, so a replay
+    redirects to the original instead of creating a second one."""
+    if record is not None:
+        record.success_url = success_url
+        record.save()

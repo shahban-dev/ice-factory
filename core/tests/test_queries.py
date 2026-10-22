@@ -31,8 +31,11 @@ class QueryCountTests(TestCase):
     def test_dashboard_query_count(self):
         # Exact counts: the guard is against N+1 growth. Measured with
         # 10 customers; if the implementation changes, re-measure.
+        # Re-measured 2026-10-22 (Group B): 36 — the B2 today cards
+        # (3 aggregates) and the B8 backup-banner lookup (1) are
+        # constant queries; verified still 36 at 30 customers.
         self.client.force_login(self.admin)
-        with self.assertNumQueries(34):
+        with self.assertNumQueries(36):
             response = self.client.get(reverse("home"))
         self.assertEqual(response.status_code, 200)
 
@@ -43,9 +46,14 @@ class QueryCountTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_ledger_query_count(self):
+        # Re-measured 2026-10-22 (Group B): 12 — the B5 WhatsApp dues
+        # link needs the factory name, one extra constant settings
+        # lookup on top of the context processor's. (A customer with
+        # sales costs 14: the two item-prefetch queries only run when
+        # sales exist, and stay flat as sales grow.)
         self.client.force_login(self.admin)
         customer = make_customer(name="Ledger Shop", phone="0300-9999999")
-        with self.assertNumQueries(11):
+        with self.assertNumQueries(12):
             response = self.client.get(
                 reverse("customers:detail", args=[customer.pk]))
         self.assertEqual(response.status_code, 200)

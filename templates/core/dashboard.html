@@ -4,6 +4,15 @@
 {% block content %}
 <h1 class="h4 mb-3">Dashboard — {{ today|date:"d-m-Y" }}</h1>
 
+{% if backup_stale %}
+<div class="alert alert-warning">
+  <strong>No successful backup in the last 36 hours.</strong>
+  Download one now from <a href="{% url 'reports:settings' %}">Settings</a>,
+  or check that the nightly backup is running — without a backup, a lost
+  server means lost records.
+</div>
+{% endif %}
+
 <div class="row g-3 mb-4">
   <div class="col-6 col-md-3">
     <div class="card p-3">
@@ -15,6 +24,18 @@
     <div class="card p-3">
       <div class="text-muted">Today's collected</div>
       <strong class="money text-money-in">{{ today_collected|rs }}</strong>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card p-3">
+      <div class="text-muted">Today's expenses</div>
+      <strong class="money text-money-out">{{ today_expenses|rs }}</strong>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card p-3">
+      <div class="text-muted">Today's profit (billed − expenses)</div>
+      <strong class="money">{{ today_sales_profit|rs }}</strong>
     </div>
   </div>
   <div class="col-12 col-md-6">

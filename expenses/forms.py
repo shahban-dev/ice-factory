@@ -22,6 +22,8 @@ class ExpenseForm(VersionedFormMixin, forms.ModelForm):
         widget=forms.TextInput(attrs={"placeholder": "Why are you changing this?"}),
         help_text="Required when editing.",
     )
+    # B4: hidden idempotency token, fresh per form render.
+    form_token = forms.CharField(required=False, widget=forms.HiddenInput())
 
     class Meta:
         model = Expense

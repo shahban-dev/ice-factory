@@ -9,6 +9,7 @@
   <div class="alert alert-danger">{{ form.non_field_errors }}</div>
   {% endif %}
   {{ form.version }}
+  {{ form.form_token }}
   <div class="mb-3">
     {{ form.customer.label_tag }}
     {{ form.customer }}

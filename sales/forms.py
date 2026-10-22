@@ -49,6 +49,10 @@ class SaleForm(VersionedFormMixin, forms.ModelForm):
     paid_method = forms.ChoiceField(
         choices=Payment.METHOD_CHOICES, initial=Payment.METHOD_CASH
     )
+    # B4: hidden idempotency token, fresh per form render. A replayed
+    # POST with the same token redirects to the original record
+    # instead of creating a second one.
+    form_token = forms.CharField(required=False, widget=forms.HiddenInput())
 
     class Meta:
         model = Sale
@@ -94,6 +98,8 @@ class PaymentForm(VersionedFormMixin, forms.ModelForm):
         widget=forms.TextInput(attrs={"placeholder": "Why are you changing this?"}),
         help_text="Required when editing.",
     )
+    # B4: hidden idempotency token, fresh per form render.
+    form_token = forms.CharField(required=False, widget=forms.HiddenInput())
 
     class Meta:
         model = Payment

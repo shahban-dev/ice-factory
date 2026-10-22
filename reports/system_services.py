@@ -16,7 +16,7 @@ from django.utils import timezone
 from core.params import parse_int
 from core.services import restore_delete_batch
 from customers.models import Customer
-from employees.models import Employee, Payroll
+from employees.models import Employee, Loan, Payroll
 from expenses.models import Expense, ExpenseCategory
 from sales.models import Payment, Product, Sale, SaleItem
 
@@ -30,6 +30,7 @@ AUDIT_MODELS = [
     (Expense, "Expense"),
     (Employee, "Employee"),
     (Payroll, "Payroll"),
+    (Loan, "Loan"),
 ]
 
 # BaseModel subclasses shown in the recycle bin.
@@ -40,6 +41,7 @@ BIN_MODELS = [
     (Expense, "Expense"),
     (Employee, "Employee"),
     (Payroll, "Payroll"),
+    (Loan, "Loan"),
 ]
 
 HISTORY_TYPE_LABELS = {"+": "Created", "~": "Changed", "-": "Deleted"}
@@ -59,10 +61,20 @@ def audit_entries(user_id=None, model_name=None, date_from=None,
                   date_to=None, object_text="", limit=500):
     """Merged history records across all business tables, newest first.
     The object-text filter matches the historical object's display name.
-    Returns a list of dicts (already sorted); callers paginate in Python."""
+    Returns a list of dicts (already sorted); callers paginate in Python.
+
+    Performance: history users are select_related (one query per model,
+    not one per row), and each row's predecessor is paired in memory
+    from the fetched window — the old code ran one prev_record query
+    per changed row, which is thousands of queries on a busy log. Only
+    a "~" row whose predecessor fell outside the fetched window still
+    costs one query, via prev_record. The pairing matches prev_record
+    exactly: the latest row for the same object with a strictly earlier
+    history_date, so rows sharing one date are never predecessors.
+    """
     entries = []
     for model, label in AUDIT_MODELS:
-        history = model.history.all()
+        history = model.history.all().select_related("history_user")
         if user_id:
             # A hand-edited ?user=abc is ignored, never a 500.
             user_id = parse_int(user_id)
@@ -74,7 +86,27 @@ def audit_entries(user_id=None, model_name=None, date_from=None,
             history = history.filter(history_date__date__gte=date_from)
         if date_to:
             history = history.filter(history_date__date__lte=date_to)
-        for record in history.order_by("-history_date")[:limit]:
+        records = list(
+            history.order_by("-history_date", "-history_id")[:limit])
+        prev_map = {}
+        by_object = {}
+        for record in records:
+            by_object.setdefault(record.id, []).append(record)
+        for rows in by_object.values():
+            rows.sort(key=lambda r: (r.history_date, r.history_id))
+            prev_group_last = None
+            current_date = None
+            current_group_last = None
+            for record in rows:
+                if record.history_date != current_date:
+                    if current_date is not None:
+                        prev_group_last = current_group_last
+                    current_date = record.history_date
+                    current_group_last = record
+                else:
+                    current_group_last = record
+                prev_map[record.history_id] = prev_group_last
+        for record in records:
             try:
                 obj_text = str(record.instance)
             except Exception:
@@ -82,14 +114,19 @@ def audit_entries(user_id=None, model_name=None, date_from=None,
             if object_text and object_text.lower() not in obj_text.lower():
                 continue
             changes = []
-            if record.history_type == "~" and record.prev_record:
-                diff = record.diff_against(record.prev_record)
-                for field in diff.changed_fields:
-                    if field in _HISTORY_FIELDS:
-                        continue
-                    old = getattr(diff.old_record, field, "")
-                    new = getattr(diff.new_record, field, "")
-                    changes.append(f"{field}: {old} → {new}")
+            if record.history_type == "~":
+                prev = prev_map.get(record.history_id)
+                if prev is None:
+                    # Predecessor outside the fetched window, if any.
+                    prev = record.prev_record
+                if prev is not None:
+                    diff = record.diff_against(prev)
+                    for field in diff.changed_fields:
+                        if field in _HISTORY_FIELDS:
+                            continue
+                        old = getattr(diff.old_record, field, "")
+                        new = getattr(diff.new_record, field, "")
+                        changes.append(f"{field}: {old} → {new}")
             entries.append({
                 "date": record.history_date,
                 "user": record.history_user,
@@ -214,6 +251,12 @@ def _restore_from_bin(model, obj, user):
                     "has a different live expense. Restoring would count "
                     "the salary twice."
                 )
+    if model is Loan and Employee.all_objects.filter(
+            pk=obj.employee_id, is_deleted=True).exists():
+        raise ValidationError(
+            "Cannot restore this loan: the employee is deleted. "
+            "Restore the employee first."
+        )
     obj.is_deleted = False
     obj.deleted_at = None
     obj.deleted_by = None

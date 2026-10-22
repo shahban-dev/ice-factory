@@ -4,22 +4,34 @@
 {% block back %}<a href="{% url 'employees:payroll_list' %}" class="btn btn-outline-secondary mb-3 no-print">← Back to payroll</a>{% endblock %}
 {% block content %}
 <h1 class="h4 mb-3">Mark paid — {{ payroll.employee.name }} ({{ month_name }} {{ payroll.year }})</h1>
-{% if payroll.net_salary <= 0 %}
+{% if payroll.net_salary <= 0 and payroll.loan_deduction <= 0 %}
 <div class="alert alert-warning">
-  Net salary is {{ payroll.net_salary|rs }}. A salary must be more than zero to be marked paid. Edit the row first.
+  Net salary is {{ payroll.net_salary|rs }} and there is no loan deduction on this row, so there is nothing to pay. Edit the row first.
 </div>
 <a class="btn btn-outline-secondary" href="{% url 'employees:payroll_detail' payroll.pk %}">Back</a>
 {% else %}
-<p class="text-muted">This creates a Salaries expense of <strong class="money">{{ payroll.net_salary|rs }}</strong> dated on the paid date, in the same transaction. The salary counts in the month it is paid.</p>
+<p class="text-muted">This creates a Salaries expense dated on the paid date, in the same transaction. The salary counts in the month it is paid. The expense is the amount actually paid{% if payroll.loan_deduction %} plus the loan deduction of <span class="money">{{ payroll.loan_deduction|rs }}</span>{% endif %}, so a loan repayment never reduces the salary expense.</p>
 <form method="post" class="card p-3 p-md-4">
   {% csrf_token %}
   {% if form.non_field_errors %}
   <div class="alert alert-danger">{{ form.non_field_errors }}</div>
   {% endif %}
+  <p><strong>Net salary:</strong> <span class="money">{{ payroll.net_salary|rs }}</span></p>
   <div class="mb-3">
     {{ form.paid_date.label_tag }}
     {{ form.paid_date }}
     {% if form.paid_date.errors %}<div class="text-danger">{{ form.paid_date.errors }}</div>{% endif %}
+  </div>
+  <div class="mb-3">
+    {{ form.paid_amount.label_tag }}
+    {{ form.paid_amount }}
+    {% if form.paid_amount.help_text %}<div class="form-text">{{ form.paid_amount.help_text }}</div>{% endif %}
+    {% if form.paid_amount.errors %}<div class="text-danger">{{ form.paid_amount.errors }}</div>{% endif %}
+  </div>
+  <div class="mb-3">
+    {{ form.paid_note.label_tag }}
+    {{ form.paid_note }}
+    {% if form.paid_note.errors %}<div class="text-danger">{{ form.paid_note.errors }}</div>{% endif %}
   </div>
   <button class="btn btn-brand" type="submit">Mark paid</button>
   <a class="btn btn-outline-secondary" href="{% url 'employees:payroll_detail' payroll.pk %}">Cancel</a>

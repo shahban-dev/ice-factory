@@ -10,12 +10,12 @@ from datetime import date
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import models, transaction
 from django.utils import timezone
 
 from core.money import q2
 from core.services import check_version, soft_delete_objects
-from employees.models import Employee, Payroll
+from employees.models import Employee, Loan, Payroll
 from expenses.models import Expense
 from expenses.services import get_salaries_category
 
@@ -45,14 +45,138 @@ def compute_proration(employee, year, month):
     return days_employed, base
 
 
-def compute_net(base_salary, bonus, deductions):
-    net = q2(base_salary + bonus - deductions)
+def compute_net(base_salary, bonus, deductions, loan_deduction=Decimal("0")):
+    net = q2(base_salary + bonus - deductions - loan_deduction)
     if net < 0:
         raise ValidationError(
             "Net salary cannot be negative. Reduce the deductions or "
             "increase the bonus."
         )
     return net
+
+
+# ---------------------------------------------------------------- loans
+
+def loan_repaid(loan):
+    """Total repaid: loan_deduction summed over PAID, non-deleted rows.
+    Draft rows do not count — only marking paid records a repayment,
+    and reopening reverses it."""
+    total = (
+        Payroll.objects.filter(loan=loan, status=Payroll.STATUS_PAID)
+        .aggregate(total=models.Sum("loan_deduction"))["total"]
+    )
+    return total or Decimal("0")
+
+
+def loan_remaining(loan):
+    return q2(loan.amount - loan_repaid(loan))
+
+
+def refresh_loan_status(loan):
+    """Settled exactly when nothing remains; back to active otherwise.
+    Returns the loan (saved only when the status changed)."""
+    wanted = (
+        Loan.STATUS_SETTLED if loan_remaining(loan) <= 0
+        else Loan.STATUS_ACTIVE
+    )
+    if loan.status != wanted:
+        loan.status = wanted
+        loan.save()
+    return loan
+
+
+def oldest_active_loan(employee):
+    """The loan payroll deducts from: oldest active loan first."""
+    return (
+        Loan.objects.filter(employee=employee, status=Loan.STATUS_ACTIVE)
+        .order_by("date", "id")
+        .first()
+    )
+
+
+def propose_loan_deduction(employee, base_salary, bonus, deductions):
+    """(loan, amount) proposed for a new payroll row: min(installment,
+    remaining, base + bonus - other deductions), never below zero and
+    never pushing net below zero. (None, 0) when there is nothing to
+    deduct."""
+    loan = oldest_active_loan(employee)
+    if loan is None:
+        return None, Decimal("0")
+    cap = base_salary + bonus - deductions
+    if cap < 0:
+        cap = Decimal("0")
+    proposed = min(loan.monthly_installment, loan_remaining(loan), cap)
+    if proposed <= 0:
+        return None, Decimal("0")
+    return loan, q2(proposed)
+
+
+def create_loan(user, employee, date, amount, installment, notes=""):
+    if date and date > timezone.localdate():
+        raise ValidationError("Loan date cannot be in the future.")
+    loan = Loan(
+        employee=employee, date=date, amount=q2(amount),
+        monthly_installment=q2(installment), notes=notes,
+        created_by=user, updated_by=user,
+    )
+    loan.full_clean()
+    loan._change_reason = "Created"
+    loan.save()
+    return loan
+
+
+def update_loan(loan, user, date, amount, installment, notes, reason,
+                form_version=None):
+    if date and date > timezone.localdate():
+        raise ValidationError("Loan date cannot be in the future.")
+    repaid = loan_repaid(loan)
+    if q2(amount) < repaid:
+        raise ValidationError(
+            f"Loan amount cannot be less than the Rs {repaid} already repaid."
+        )
+    with transaction.atomic():
+        locked = Loan.objects.select_for_update().get(pk=loan.pk)
+        if form_version is not None:
+            check_version(locked, form_version)
+        locked.date = date
+        locked.amount = q2(amount)
+        locked.monthly_installment = q2(installment)
+        locked.notes = notes
+        locked.updated_by = user
+        locked._change_reason = reason
+        locked.full_clean()
+        locked.save()
+        refresh_loan_status(locked)
+    return locked
+
+
+def delete_loan(loan, user, reason):
+    """Blocked when any repayment exists. Draft rows that reference the
+    loan have their deduction cleared (they are uncommitted plans, not
+    repayments); the cleared rows are returned for the message."""
+    repaid = loan_repaid(loan)
+    if repaid > 0:
+        raise ValidationError(
+            f"This loan cannot be deleted: Rs {repaid} has already been "
+            "repaid through payroll."
+        )
+    cleared = []
+    with transaction.atomic():
+        locked = Loan.objects.select_for_update().get(pk=loan.pk)
+        for row in Payroll.objects.filter(
+            loan=locked, status=Payroll.STATUS_DRAFT
+        ):
+            row.loan = None
+            row.loan_deduction = Decimal("0")
+            row.net_salary = compute_net(
+                row.base_salary, row.bonus, row.deductions
+            )
+            row.updated_by = user
+            row._change_reason = "Loan deleted; deduction cleared"
+            row.save()
+            cleared.append(row)
+        soft_delete_objects([locked], user, reason)
+    return cleared
 
 
 def generate_payroll(user, year, month):
@@ -86,11 +210,15 @@ def generate_payroll(user, year, month):
                 skipped_existing += 1
                 continue
             days_employed, base = proration
+            loan, loan_deduction = propose_loan_deduction(
+                employee, base, Decimal("0"), Decimal("0")
+            )
             row = Payroll(
                 employee=employee, year=year, month=month,
                 base_salary=base, days_employed=days_employed,
                 bonus=Decimal("0"), deductions=Decimal("0"),
-                net_salary=base, status=Payroll.STATUS_DRAFT,
+                loan=loan, loan_deduction=loan_deduction,
+                net_salary=base - loan_deduction, status=Payroll.STATUS_DRAFT,
                 created_by=user, updated_by=user,
             )
             row._change_reason = "Generated"
@@ -105,14 +233,33 @@ def generate_payroll(user, year, month):
 
 
 def update_payroll_draft(payroll, user, bonus, deductions, deduction_note,
-                         reason, form_version):
+                         reason, form_version, loan=None, loan_deduction=None):
     """Edit a draft row. Paid rows must be reopened first. Net is
-    recomputed on the server and must stay >= 0 (never clamped)."""
+    recomputed on the server and must stay >= 0 (never clamped). A loan
+    deduction may never exceed the loan's remaining balance, and a
+    deduction without a loan is rejected."""
     if payroll.status != Payroll.STATUS_DRAFT:
         raise ValidationError(
             "This payroll row is already paid. Reopen it first, then edit."
         )
-    net = compute_net(payroll.base_salary, bonus, deductions)
+    if loan_deduction is None:
+        loan_deduction = Decimal("0")
+    loan_deduction = q2(loan_deduction)
+    if loan_deduction > 0 and loan is None:
+        raise ValidationError(
+            "Pick the loan this deduction repays, or set the loan "
+            "deduction to zero."
+        )
+    if loan is not None and loan.employee_id != payroll.employee_id:
+        raise ValidationError("That loan belongs to another employee.")
+    if loan is not None and loan_deduction > loan_remaining(loan):
+        raise ValidationError(
+            f"Loan deduction cannot exceed the Rs {loan_remaining(loan)} "
+            "still owed on this loan."
+        )
+    if loan is None:
+        loan_deduction = Decimal("0")
+    net = compute_net(payroll.base_salary, bonus, deductions, loan_deduction)
     with transaction.atomic():
         locked = Payroll.all_objects.select_for_update().get(pk=payroll.pk)
         check_version(locked, form_version)
@@ -123,6 +270,8 @@ def update_payroll_draft(payroll, user, bonus, deductions, deduction_note,
         locked.bonus = bonus
         locked.deductions = deductions
         locked.deduction_note = deduction_note
+        locked.loan = loan
+        locked.loan_deduction = loan_deduction
         locked.net_salary = net
         locked.updated_by = user
         locked._change_reason = reason
@@ -130,20 +279,38 @@ def update_payroll_draft(payroll, user, bonus, deductions, deduction_note,
     return locked
 
 
-def mark_paid(payroll, user, paid_date):
+def mark_paid(payroll, user, paid_date, paid_amount=None, paid_note=""):
     """Mark a draft row paid and create its linked Salaries expense in
-    the same transaction. The salary counts in the month it is PAID."""
+    the same transaction. The salary counts in the month it is PAID.
+
+    paid_amount is the cash actually handed over: it defaults to
+    net_salary, and an override requires a note. The expense is
+    paid_amount + loan_deduction — the salary expense (base + bonus -
+    other deductions), so a loan repayment never reduces it. The row's
+    loan_deduction is what repays the loan: once paid, it counts toward
+    the loan's repaid total, and reopening reverses it."""
     if paid_date and paid_date > timezone.localdate():
         raise ValidationError("Paid date cannot be in the future.")
     if not paid_date:
         raise ValidationError("Paid date is required.")
+    if paid_amount is not None:
+        paid_amount = q2(paid_amount)
+        if paid_amount < 0:
+            raise ValidationError("Amount paid cannot be negative.")
     with transaction.atomic():
         locked = Payroll.all_objects.select_for_update().get(pk=payroll.pk)
         if locked.status != Payroll.STATUS_DRAFT:
             raise ValidationError("This payroll row is already paid.")
-        if locked.net_salary <= 0:
+        if paid_amount is None:
+            paid_amount = locked.net_salary
+        if paid_amount != locked.net_salary and not (paid_note or "").strip():
             raise ValidationError(
-                "Net salary must be more than zero to mark it paid."
+                "Amount paid differs from net salary — a note is required."
+            )
+        if paid_amount <= 0 and locked.loan_deduction <= 0:
+            raise ValidationError(
+                "Nothing to pay: net salary is zero and there is no loan "
+                "deduction on this row."
             )
         if locked.linked_expense_id is not None:
             raise ValidationError("This payroll row already has an expense.")
@@ -151,7 +318,7 @@ def mark_paid(payroll, user, paid_date):
         expense = Expense(
             date=paid_date,
             category=get_salaries_category(),
-            amount=locked.net_salary,
+            amount=q2(paid_amount + locked.loan_deduction),
             description=f"Salary {month_name} {locked.year} - {locked.employee.name}",
             method=Expense.METHOD_CASH,
             created_by=user, updated_by=user,
@@ -160,20 +327,27 @@ def mark_paid(payroll, user, paid_date):
         expense.save()
         locked.status = Payroll.STATUS_PAID
         locked.paid_date = paid_date
+        locked.paid_amount = paid_amount
+        locked.paid_note = paid_note
         locked.linked_expense = expense
         locked.updated_by = user
         locked._change_reason = "Marked paid"
         locked.save()
+        if locked.loan_id is not None:
+            refresh_loan_status(Loan.objects.get(pk=locked.loan_id))
     return locked
 
 
 def reopen_payroll(payroll, user):
-    """Paid -> draft: the linked expense is soft-deleted. The row can
-    then be edited and marked paid again (creating a new expense)."""
+    """Paid -> draft: the linked expense is soft-deleted, and any loan
+    repayment on the row is reversed (the row no longer counts as
+    repaid, so a settled loan goes back to active). The row can then
+    be edited and marked paid again (creating a new expense)."""
     with transaction.atomic():
         locked = Payroll.all_objects.select_for_update().get(pk=payroll.pk)
         if locked.status != Payroll.STATUS_PAID:
             raise ValidationError("Only a paid row can be reopened.")
+        loan_id = locked.loan_id
         if locked.linked_expense is not None:
             soft_delete_objects(
                 [locked.linked_expense], user, "Payroll reopened"
@@ -184,4 +358,6 @@ def reopen_payroll(payroll, user):
         locked.updated_by = user
         locked._change_reason = "Reopened"
         locked.save()
+        if loan_id is not None:
+            refresh_loan_status(Loan.objects.get(pk=loan_id))
     return locked

@@ -52,3 +52,30 @@
     });
   }
 })();
+
+  // Double-submit guard: on a slow phone, a second tap on Save is
+  // easy. The first submit goes through untouched (so the clicked
+  // button's name/value still posts, e.g. "Save and print"); any
+  // later submit of the same form is stopped, and the buttons show
+  // they are working. The server-side idempotency token is the real
+  // guarantee — this only stops the accidental second tap. Only
+  // plain POST forms are guarded; HTMX forms are left alone.
+  document.querySelectorAll('form[method="post"]').forEach(function (form) {
+    if (form.hasAttribute("hx-post") || form.hasAttribute("hx-get")) {
+      return;
+    }
+    form.addEventListener("submit", function (event) {
+      if (form.dataset.submitted === "true") {
+        event.preventDefault();
+        return;
+      }
+      form.dataset.submitted = "true";
+      form.querySelectorAll('button[type="submit"], input[type="submit"]')
+        .forEach(function (button) {
+          button.classList.add("disabled");
+          if (button.tagName === "BUTTON" && button.textContent.trim()) {
+            button.textContent = "Saving…";
+          }
+        });
+    });
+  });
