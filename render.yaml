@@ -1,0 +1,46 @@
+# Render Blueprint for TESTING the Ice Factory app (free tier).
+#
+# How to use it (about 15 minutes, no server to manage):
+#   1. Create a free account at render.com (sign up with GitHub).
+#   2. Dashboard > New > Blueprint, connect the shahban-dev/ice-factory
+#      repository, and apply this file.
+#   3. Render creates the web app + a free PostgreSQL database, installs
+#      the requirements, collects static files, and runs migrations.
+#   4. Open the app's .onrender.com URL, then create your login:
+#      Render dashboard > the service > Shell, and run
+#      `python manage.py createsuperuser`.
+#      For demo data to click around with, run
+#      `python manage.py seed_demo --force` and type SEED DEMO.
+#
+# Free-tier limits (fine for testing, not for the real client):
+#   - The app sleeps after inactivity, so the first load takes ~30-60s.
+#   - The free database expires after 30 days.
+# For the real client, use the VPS runbook in DEPLOYMENT.md instead.
+services:
+  - type: web
+    name: ice-factory
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate
+    startCommand: gunicorn config.wsgi:application
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: DEBUG
+        value: "False"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_URL
+        value: site-admin/
+      - key: ALLOWED_HOSTS
+        fromService:
+          type: web
+          name: ice-factory
+          property: host
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ice-factory-db
+          property: connectionString
+databases:
+  - name: ice-factory-db
+    plan: free

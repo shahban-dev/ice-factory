@@ -1,7 +1,32 @@
 # Deployment guide — Ice Factory Management System (Version 1)
 
-One option only: a single Ubuntu LTS VPS. There is no other supported
-hosting for this system.
+Production hosting is one option only: a single Ubuntu LTS VPS (sections
+1+ below). The Render route in section 0 is for TESTING only — it is
+free, temporary, and not a substitute for the VPS.
+
+## 0. Testing on Render (free, temporary)
+
+The repo ships a `render.yaml` blueprint, so a test site takes ~15
+minutes and no server management:
+
+1. Create a free account at render.com (sign up with GitHub).
+2. Dashboard > New > Blueprint, connect the `shahban-dev/ice-factory`
+   repository, and apply. Render creates the web app + a free
+   PostgreSQL database, installs requirements, collects static files,
+   and runs migrations.
+3. Open the app's `.onrender.com` URL. Create your login from the
+   Render dashboard > the service > Shell:
+   `python manage.py createsuperuser`
+   For demo data to click around with, run
+   `python manage.py seed_demo --force` and type `SEED DEMO` at the
+   prompt. The admin login page is at `/site-admin/` on the test site.
+4. If the blueprint's automatic `ALLOWED_HOSTS` does not take effect,
+   set it by hand in Render > the service > Environment to the app's
+   `.onrender.com` hostname and redeploy.
+
+Free-tier limits: the app sleeps after inactivity (first load takes
+~30-60 seconds) and the free database expires after 30 days. When
+testing is done, move to the VPS guide below for the real client.
 
 ## 1. Pick the server
 

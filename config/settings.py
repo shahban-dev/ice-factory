@@ -33,6 +33,18 @@ ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 if DEBUG and not ALLOWED_HOSTS:
     ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 
+# CSRF: trust the same hosts we serve. An explicit env value wins;
+# otherwise derive https:// origins from ALLOWED_HOSTS, so a new live
+# host (Render, VPS domain) works by setting ALLOWED_HOSTS alone.
+# Without this, login and every other POST fail CSRF on a new domain.
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+if not CSRF_TRUSTED_ORIGINS:
+    CSRF_TRUSTED_ORIGINS = [
+        f"https://{host}"
+        for host in ALLOWED_HOSTS
+        if host and "*" not in host and not host.startswith(".")
+    ]
+
 # Non-default admin URL, taken from the environment (superusers only).
 ADMIN_URL = env("ADMIN_URL", default="site-admin/").strip("/") + "/"
 
