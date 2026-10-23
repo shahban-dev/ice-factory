@@ -428,7 +428,9 @@ documentation.
   automatically; the user reviews and sends from their own WhatsApp.
   Only Pakistani mobile numbers (03XX…) get a button — landlines do
   not. Whether to accept landlines, and fractional quantities (kg,
-  half blocks), is still the client's decision (B7, open).
+  half blocks), was the client's decision (B7): on 2026-10-22 the
+  client confirmed they have no such requirements, so neither is
+  built — mobiles only, whole blocks only.
 - Password change + admin safety (B6): any logged-in user can change
   their own password from the top menu; a forgotten password is
   reset by the developer from the server shell (see DEPLOYMENT.md).
